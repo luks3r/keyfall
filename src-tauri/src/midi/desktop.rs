@@ -34,11 +34,13 @@ impl Notes {
         let channel = commands.live_channel();
         match status & 0xf0 {
             NOTE_ON if value > 0 => {
+                // A repeated note-on without its note-off releases the earlier one first, so holds stay balanced.
+                let mut out: Vec<Command> = self.held.remove(&data).map(|(notes, channel)| notes.into_iter().map(|midi| Command::KeyOff { channel, midi }).collect()).unwrap_or_default();
                 let notes = commands.map_note(data);
                 let velocity = value as f32 / VELOCITY_MAX;
-                let on = notes.iter().map(|&midi| Command::KeyOn { channel, midi, velocity }).collect();
+                out.extend(notes.iter().map(|&midi| Command::KeyOn { channel, midi, velocity }));
                 self.held.insert(data, (notes, channel));
-                on
+                out
             }
             NOTE_ON | NOTE_OFF => self
                 .held
@@ -163,5 +165,8 @@ mod tests {
         assert!(matches!(notes.commands(&[0xb0, 64, 100], &commands)[..], [Command::Pedal { down: true, .. }]));
         assert!(notes.commands(&[0xb0, 1, 100], &commands).is_empty());
         assert!(notes.commands(&[0xf8], &commands).is_empty());
+        notes.commands(&[0x90, 62, 100], &commands);
+        assert_eq!(kinds(&notes.commands(&[0x90, 62, 90], &commands)), [(62, false), (62, true)], "a repeated note-on releases the first, keeping holds balanced");
+
     }
 }

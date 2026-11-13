@@ -26,17 +26,19 @@ pub struct Sample {
     pub data: Arc<[f32]>,
 }
 
-/// Keys held on one channel and the notes its sustain pedal keeps sounding.
+/// Keys held on one channel and the notes its sustain pedal keeps sounding. `holds` counts what holds each key:
+/// two chords sharing a note both hold it, so letting go of one leaves it sounding for the other.
 #[derive(Clone)]
 struct Keys {
     voices: [u32; KEYS],
+    holds: [u8; KEYS],
     sustained: u128,
     pedal: bool,
 }
 
 impl Default for Keys {
     fn default() -> Self {
-        Self { voices: [0; KEYS], sustained: 0, pedal: false }
+        Self { voices: [0; KEYS], holds: [0; KEYS], sustained: 0, pedal: false }
     }
 }
 
@@ -105,10 +107,11 @@ impl Engine {
         std::mem::take(&mut self.samples)
     }
 
-    /// Plays a key on a channel, restarting it if it is still sounding.
+    /// Plays a key on a channel, restarting it if it is still sounding. Every `key_on` needs its own `key_off`.
     pub fn key_on(&mut self, channel: usize, midi: u8, velocity: f32) {
         let Some(keys) = self.keys.get_mut(channel) else { return };
         let key = midi as usize % KEYS;
+        keys.holds[key] = keys.holds[key].saturating_add(1);
         let previous = std::mem::replace(&mut keys.voices[key], self.next_key);
         keys.sustained &= !(1 << key);
         let id = self.next_key;
@@ -119,10 +122,15 @@ impl Engine {
         self.note_on(id, channel, midi, velocity);
     }
 
-    /// Releases a key, or leaves it sounding while the channel's pedal is down.
+    /// Releases a key once nothing else holds it, or leaves it sounding while the channel's pedal is down.
     pub fn key_off(&mut self, channel: usize, midi: u8) {
         let Some(keys) = self.keys.get_mut(channel) else { return };
         let key = midi as usize % KEYS;
+        if keys.holds[key] > 1 {
+            keys.holds[key] -= 1;
+            return;
+        }
+        keys.holds[key] = 0;
         if keys.voices[key] == 0 {
             return;
         }
@@ -354,6 +362,26 @@ mod tests {
         engine.pedal(0, false);
         assert_eq!(sounding(&engine), 1, "pedal up releases only keys no longer held");
         engine.key_off(0, 67);
+        assert_eq!(sounding(&engine), 0);
+    }
+
+    #[test]
+    fn a_note_shared_by_two_chords_sounds_until_both_let_go() {
+        let mut engine = Engine::new(RATE);
+        for midi in [60, 64, 67] {
+            engine.key_on(0, midi, 1.);
+        }
+        for midi in [64, 67, 71] {
+            engine.key_on(0, midi, 1.);
+        }
+        assert_eq!(sounding(&engine), 4, "shared notes restart instead of doubling");
+        for midi in [60, 64, 67] {
+            engine.key_off(0, midi);
+        }
+        assert_eq!(sounding(&engine), 3, "the second chord keeps its shared notes");
+        for midi in [64, 67, 71] {
+            engine.key_off(0, midi);
+        }
         assert_eq!(sounding(&engine), 0);
     }
 

@@ -130,9 +130,10 @@ class Engine {
     if (channel === this.liveChannel) platform.midi.send([NOTE_ON, midi, midiVelocity(velocity)])
   }
 
-  keyOff(channel: number, midi: number, sounded = false) {
+  /** Every `keyOn` needs its `keyOff`; `stillHeld` (another key shares the note) keeps MIDI out from cutting it. */
+  keyOff(channel: number, midi: number, sounded = false, stillHeld = false) {
     if (!sounded && !this.#muted) platform.audio.keyOff(channel, midi)
-    if (channel === this.liveChannel) platform.midi.send([NOTE_OFF, midi, 0])
+    if (channel === this.liveChannel && !stillHeld) platform.midi.send([NOTE_OFF, midi, 0])
   }
 
   pedal(channel: number, down: boolean, sounded = false) {
