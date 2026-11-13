@@ -127,6 +127,54 @@ Group the sequencer grid by beat and bar. Show clip length, resolution, selected
 
 Clear is visually separated from routine pattern operations and remains undoable. Controls whose behavior depends on a selection state their target in the editor heading or label.
 
+### Arrange MIDI on the timeline
+
+The user has not specified arrangement gestures or context menus. Treat the following as designer-proposed behavior, based on the existing clip model, rather than confirmed user preferences. Arrangement interaction is part of the redesign, not merely a color treatment.
+
+Current behavior creates a clip when an already selected lane is clicked, selects and moves a clip by dragging its body, resizes through its right edge, and seeks through the ruler. Session right-click opens Steps directly; Arrangement has no context menu. Replace ambiguous selection-dependent creation with explicit actions.
+
+#### Selection and editing
+
+- Click/tap a clip to select it. Selection alone does not start playback or create notes. The inspector identifies its track, start, and duration, and exposes Edit, Duplicate, and Delete.
+- Double-click a clip or press Enter on a focused clip to open its editor. Use the last chosen Steps/Notes editor, defaulting to Steps when no choice exists. A visible Edit action provides the touch equivalent.
+- Click/tap empty lane space to select that track and an insertion position. Do not create a clip on an ordinary selection click. The timeline insertion marker is distinct from the playback head and step-input cursor.
+- A visible New Clip action creates a clip at that insertion position; when no insertion position exists, use the playback position snapped to the active arrangement grid. Double-click empty lane space is a desktop accelerator. Default duration remains one bar initially, with duration editable in the selected-clip controls.
+- Show a helpful empty-state action for adding the first track and clip. Clip selection and editor context remain visible when the timeline scrolls.
+
+#### Movement, resizing, and musical timing
+
+- Drag a clip body horizontally to move it within its track. Show its original outline, proposed position, and start value. Commit one undo operation on release. Escape or pointer cancellation restores the original state, releases pointer capture, and leaves no partial edit.
+- Show a distinct right-edge resize affordance for the selected clip. Resize changes the clip boundary; it never time-stretches notes. Show proposed duration before committing. Exact start and duration fields offer a precise non-drag alternative.
+- Preserve stored note events when shortening a clip. Notes outside its audible boundary remain stored; extending it restores their visibility/audibility where the existing pattern repeat semantics permit. Explain this in the clip controls rather than silently deleting notes.
+- For an existing repeating clip, resizing retains its repeat period. For an ordinary clip, extending adds available duration rather than silently enabling repetition. Surface an existing repeat period as a labeled value where supported; do not invent an ambiguous loop handle.
+- Provide a labeled arrangement Snap control, separate from note quantization and session launch quantization. Proposed choices: Bar, Beat, 1/8, 1/16; default Beat, preserving existing move granularity. Insertion, movement, and resizing use this same grid. Minimum duration is one grid unit and start cannot be negative. Ruler seeking remains independent of snap.
+- Show the playback loop on its own ruler strip, visually distinct from clip repetition. Its start/end controls and enabled state are visible; dragging remains an accelerator. Selection alone never changes the playback loop.
+- Preserve any existing overlapping clips and their additive playback. New Clip and Duplicate choose an available position on the selected track at or after the requested position and announce the actual position. A move/resize that overlaps another clip shows a clear overlap warning in the preview; it does not overwrite or erase either clip. Do not add automatic ripple editing or merging.
+- Cross-track moves, multiselection, marquee selection, split, clipboard transfer, and linked duplicates are outside the initial redesign slice. Do not display nonfunctional menu items for them. They can be designed separately if requested.
+
+#### Context menus and visible alternatives
+
+Right-click is a shortcut to the same actions available in labeled controls. It must never move, resize, seek, create, or launch anything. Filter non-primary pointer presses before starting any drag. Right-click first identifies its target, then opens the menu; commands act on that target rather than a stale selection.
+
+| Target | Initial menu actions | Visible equivalent |
+| --- | --- | --- |
+| Clip | Edit in Steps; Edit in Notes; Duplicate; Set Playback Loop to Clip; Delete Clip | Selected-clip action strip and action menu |
+| Empty track lane | New Clip Here | New Clip at the visible insertion position |
+| Track header | Track Settings; Mute/Unmute; Solo/Unsolo | Track controls and selected-track inspector |
+| Ruler | No custom menu required initially | Seek and labeled playback-loop controls |
+
+Duplicate creates an independent copy, selecting it and placing it after the source at the first available position; editing the copy does not change the source. Set Playback Loop to Clip copies its start/end to the playback loop and enables that loop, without changing clip repetition or starting transport. Delete Clip removes only the targeted clip, remains undoable, and is separated from routine editing actions. Existing track deletion remains in Track Settings, with explicit destructive labeling.
+
+On touch, selection reveals the same actions without a hold gesture. Long-press may open the action sheet as an optional accelerator, cancelled by movement or scrolling. One gesture must not both open actions and edit a clip. On coarse pointers, selection reveals a dedicated move grip and resize grip, leaving the rest of the clip available for selection and timeline scrolling. Grips have at least 44px hit areas; when clips are too narrow, precise fields provide the usable equivalent. Existing musical content scrolls horizontally and track lanes vertically; do not globally disable touch scrolling.
+
+Context menus support arrow-key navigation, Enter activation, Escape dismissal, focus restoration, and viewport-edge placement. Shift+F10 or the context-menu key opens actions for the focused clip. Menu focus suspends musical shortcuts; dismissing it does not trigger a note, delete a clip, or change transport.
+
+When the arrangement itself has editing focus, Delete/Backspace removes the selected clip and Primary+D duplicates it. Enter opens the editor. These commands do not run from a text field, parameter control, menu, dialog, or active performance surface. Preserve global undo/redo, clearly indicate which surface owns focus, and show shortcut hints in the action menu. Do not take existing musical arrow keys for clip navigation without an explicit focus boundary; track and clip buttons must remain reachable through ordinary focus navigation.
+
+#### Arrangement-specific acceptance
+
+Verify ordinary lane selection never creates a clip; New Clip uses the indicated position; Edit works with mouse, touch, and keyboard; right-click cannot initiate a drag; duplicate edits are independent; delete and drag each undo in one operation; cancelled drags restore original values; shortening retains source notes; repeating clips retain their period; overlap previews never erase content; menu dismissal restores focus without notes; and touch scrolling does not accidentally move clips. These checks extend the existing Studio regression runner only for implemented behavior.
+
 ### Shape sound
 
 Use the existing patch parameters, grouped by their musical purpose. Pair an envelope with its curve where practical; show numeric values and units alongside controls. A knob is optional: every parameter still needs an accessible keyboard interaction and precise value entry. No decorative encoder with unspecified behavior.
