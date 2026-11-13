@@ -1,4 +1,5 @@
 import { untrack } from 'svelte'
+import { normalizeTheme, type ThemePreference } from './theme'
 import { engine } from './audio/engine.svelte'
 import { compile, KEYMAPS, type KeyLayout } from './input/keymaps'
 
@@ -13,6 +14,7 @@ export type Workspace = (typeof WORKSPACES)[number]
 const STORAGE_KEY = 'keyfall.settings.v2'
 
 type Stored = {
+  theme: ThemePreference
   keymap: string
   custom: KeyLayout
   transpose: number
@@ -30,6 +32,7 @@ type Stored = {
 }
 
 const DEFAULTS: Stored = {
+  theme: 'system',
   keymap: KEYMAPS[0].id,
   custom: { ...KEYMAPS[0].keys },
   transpose: 0,
@@ -65,6 +68,7 @@ const presetLayout = (id: string) => (KEYMAPS.find((keymap) => keymap.id === id)
 const stored = load()
 
 class Settings {
+  theme = $state(normalizeTheme(stored.theme))
   keymapId = $state(stored.keymap)
   custom = $state(stored.custom)
   transpose = $state(stored.transpose)
@@ -93,6 +97,7 @@ class Settings {
     $effect.root(() => {
       $effect(() =>
         save({
+          theme: this.theme,
           keymap: this.keymapId,
           custom: $state.snapshot(this.custom),
           transpose: this.transpose,

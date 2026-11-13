@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export const TRACK_COLORS = ['#8d9dff', '#3ad6b8', '#f6b94c', '#f472b6', '#60a5fa', '#c084fc', '#fb923c', '#a3e635']
+  export const TRACK_COLORS = Array.from({ length: 8 }, (_, i) => `var(--color-track-${i + 1})`)
   export const trackColor = (index: number) => TRACK_COLORS[index % TRACK_COLORS.length]
 </script>
 
@@ -170,7 +170,7 @@
               class={['absolute inset-y-1 cursor-grab touch-none overflow-hidden rounded-md', active ? 'ring-2 ring-fg' : '']}
               style:left="{clip.start * zoom}px"
               style:width="{clip.length * zoom}px"
-              style:background="{color}33"
+              style:background="color-mix(in srgb, {color} 18%, var(--color-display))"
               style:border="1px solid {color}"
               onpointerdown={(e) => onClipDown(e, track, clip)}
               onclick={(e) => e.stopPropagation()}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { theme } from './lib/theme.svelte'
   import Progress from './lib/Progress.svelte'
   import Roll from './lib/Roll.svelte'
   import RoomPanel from './lib/RoomPanel.svelte'
@@ -35,10 +36,12 @@
   const learning = $derived(settings.workspace === 'learn')
 
   onMount(() => {
+    const stopTheme = theme.start()
     localizeLabels().then(() => (player.dirty = true))
     void midi.restore()
     const unbind = bindKeyboard(player)
     return () => {
+      stopTheme()
       unbind()
       room.leave()
       midi.close()

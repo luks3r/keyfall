@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { theme, readCanvasPalette } from './theme.svelte'
   import { MediaQuery } from 'svelte/reactivity'
   import { SHIFT, symbol } from './input/keymaps'
   import { Mark, type Player } from './player.svelte'
@@ -16,23 +17,12 @@
   const MAX_VELOCITY = 1
   const touch = new MediaQuery('pointer: coarse')
   const BLACK = [false, true, false, true, false, false, true, false, true, false, true, false]
-  const COLORS = {
-    bg: '#0c0d11',
-    lane: '#ffffff05',
-    octave: '#ffffff0c',
-    line: '#8a9bff',
-    white: '#eceef3',
-    black: '#17181e',
-    seam: '#00000022',
-    labelOnWhite: '#0c0d1166',
-    labelOnBlack: '#ffffff70',
-    user: '#f6b94c',
-    edit: '#ff6b8a',
-  }
-  const HANDS = [
-    ['#3ad6b8', '#22a58c'],
-    ['#8d9dff', '#5e6fe6'],
-  ]
+  let COLORS = $state({ bg: '#141514', lane: '#ffffff05', octave: '#ffffff0c', line: '#eee', white: '#eee', black: '#222', seam: '#0003', labelOnWhite: '#333', labelOnBlack: '#ccc', user: '#df9b3d', edit: '#d23b30', hands: [['#62bfa6', '#27836c'], ['#6d9fd7', '#4273a9']] })
+  const HANDS = $derived(COLORS.hands)
+  $effect(() => {
+    void theme.revision
+    if (canvas) { COLORS = readCanvasPalette(canvas); player.dirty = true }
+  })
 
   const isBlack = (midi: number) => BLACK[midi % 12]
 
@@ -168,8 +158,8 @@
       if (editing >= lo && editing <= hi) lit[editing] = COLORS.edit
 
       const glow = ctx.createLinearGradient(0, top - 48, 0, top)
-      glow.addColorStop(0, '#8a9bff00')
-      glow.addColorStop(1, '#8a9bff1c')
+      glow.addColorStop(0, 'transparent')
+      glow.addColorStop(1, COLORS.octave)
       ctx.fillStyle = glow
       ctx.fillRect(0, top - 48, width, 48)
 

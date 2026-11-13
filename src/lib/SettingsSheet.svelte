@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import type { ThemePreference } from './theme'
   import { engine } from './audio/engine.svelte'
   import { sound } from './audio/sound.svelte'
   import { KEYMAPS } from './input/keymaps'
@@ -81,6 +82,11 @@
     <Button variant="ghost" shape="square" onclick={refresh} title="Rescan devices" aria-label="Rescan devices"><Icon name="refresh" /></Button>
   {/snippet}
 
+  <Section title="Appearance">
+    <Field label="Theme">
+      <Select bind:value={() => settings.theme, (v) => (settings.theme = v as ThemePreference)} options={[{value:'system',label:'System'},{value:'light',label:'Light · OP-1'},{value:'dark',label:'Dark · OP-XY'}]} />
+    </Field>
+  </Section>
   <Section title="Sound">
     <Field label="Instrument" hint={SOUND_HINT[engine.status]} tone={engine.status === 'error' ? 'danger' : 'accent'}>
       <Select bind:value={() => sound.presetId, (id) => sound.select(id)} options={soundOptions} />

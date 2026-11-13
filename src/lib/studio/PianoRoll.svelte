@@ -208,7 +208,7 @@
       <div
         class="relative"
         style:width="{width}px"
-        style:background-image="repeating-linear-gradient(90deg, #ffffff22 0 1px, transparent 1px {bar * zoom}px), repeating-linear-gradient(90deg, #ffffff0d 0 1px, transparent 1px {zoom}px), repeating-linear-gradient(180deg, #ffffff08 0 1px, transparent 1px {row}px)"
+        style:background-image="repeating-linear-gradient(90deg, var(--color-grid-strong) 0 1px, transparent 1px {bar * zoom}px), repeating-linear-gradient(90deg, var(--color-grid) 0 1px, transparent 1px {zoom}px), repeating-linear-gradient(180deg, var(--color-grid-faint) 0 1px, transparent 1px {row}px)"
         onclick={onGridClick}
         role="presentation"
       >

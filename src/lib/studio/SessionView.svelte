@@ -97,7 +97,7 @@
             queued && 'animate-pulse',
             armed && 'ring-2 ring-accent',
           ]}
-          style:background={clip ? `${color}${active ? '66' : '2e'}` : undefined}
+          style:background={clip ? `color-mix(in srgb, ${color} ${active ? 40 : 18}%, var(--color-display))` : undefined}
           style:border={clip ? `1px solid ${color}` : undefined}
           onpointerdown={(e) => press(e, track, s)}
           onpointerup={() => release(track, s, clip)}

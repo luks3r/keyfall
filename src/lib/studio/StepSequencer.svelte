@@ -192,7 +192,7 @@
           <div
             class="relative touch-none"
             style:width="{steps * stepWidth}px"
-            style:background-image="repeating-linear-gradient(90deg, #ffffff26 0 1px, transparent 1px {stepWidth * stepsPerBeat * studio.project.beatsPerBar}px), repeating-linear-gradient(90deg, #ffffff14 0 1px, transparent 1px {stepWidth * stepsPerBeat}px), repeating-linear-gradient(90deg, #ffffff08 0 1px, transparent 1px {stepWidth}px)"
+            style:background-image="repeating-linear-gradient(90deg, var(--color-grid-strong) 0 1px, transparent 1px {stepWidth * stepsPerBeat * studio.project.beatsPerBar}px), repeating-linear-gradient(90deg, var(--color-grid) 0 1px, transparent 1px {stepWidth * stepsPerBeat}px), repeating-linear-gradient(90deg, var(--color-grid-faint) 0 1px, transparent 1px {stepWidth}px)"
             onpointerdown={(e) => onRowDown(e, pitch)}
             role="row"
             tabindex="-1"

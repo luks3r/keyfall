@@ -48,3 +48,32 @@
     accent-color: var(--color-accent);
   }
 }
+
+/* One instrument geometry, two material palettes. */
+:root {
+  --color-bg: #101110; --color-surface: #1b1d1b; --color-raised: #292c28; --color-hover: #363a34;
+  --color-line: #3d423a; --color-fg: #eeeede; --color-muted: #b2b6a9;
+  --color-accent: #eeeede; --color-accent-strong: #ffffff; --color-mint: #e5a54b; --color-danger: #ff7968;
+  --color-display: #111411; --color-grid-faint: #ffffff0c; --color-grid: #ffffff1c; --color-grid-strong: #ffffff38;
+  --color-playhead: #f5f4dc; --color-key-white: #deded3; --color-key-black: #252923; --color-key-seam: #00000055;
+  --color-key-label-white: #3c4238; --color-key-label-black: #c7cdbf;
+  --color-hand-left: #6ac7a7; --color-hand-left-dark: #3aa480; --color-hand-right: #91b6ea; --color-hand-right-dark: #6497d7;
+  --color-track-1: #91b6ea; --color-track-2: #6ac7a7; --color-track-3: #e9af58; --color-track-4: #d9d9c9;
+  --color-track-5: #d7a0ae; --color-track-6: #b9a5df; --color-track-7: #e9ad8b; --color-track-8: #b7ca7f;
+  --font-sans: 'Helvetica Neue', Arial, ui-sans-serif, system-ui, sans-serif;
+}
+:root[data-theme='light'] {
+  --color-bg: #e8e7e2; --color-surface: #f4f3ee; --color-raised: #deded6; --color-hover: #d0d1c7;
+  --color-line: #b8bcb0; --color-fg: #252a25; --color-muted: #596153;
+  --color-accent: #2b352c; --color-accent-strong: #101810; --color-mint: #9b5618; --color-danger: #b73226;
+  --color-display: #f0f0e8; --color-grid-faint: #1620140d; --color-grid: #16201420; --color-grid-strong: #16201440;
+  --color-playhead: #293a2b; --color-key-white: #faf9f0; --color-key-black: #343a31; --color-key-seam: #252f2340;
+  --color-key-label-white: #535b4b; --color-key-label-black: #e9eddf;
+  --color-hand-left: #2e896d; --color-hand-left-dark: #67c4a0; --color-hand-right: #456eab; --color-hand-right-dark: #8eb5e8;
+  --color-track-1: #39699c; --color-track-2: #26775a; --color-track-3: #92590c; --color-track-4: #626b55;
+  --color-track-5: #9b4f65; --color-track-6: #7453a5; --color-track-7: #a45630; --color-track-8: #637c22;
+}
+body { letter-spacing: .005em; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }
+}
