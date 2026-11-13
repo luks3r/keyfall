@@ -1,0 +1,50 @@
+@import 'tailwindcss';
+
+@custom-variant mac-native (&:where(.mac-native, .mac-native *));
+
+@theme {
+  --color-bg: #0c0d11;
+  --color-surface: #121318;
+  --color-raised: #1c1e25;
+  --color-hover: #282b36;
+  --color-line: #ffffff10;
+  --color-fg: #e8e9ee;
+  --color-muted: #7d8090;
+  --color-accent: #8d9dff;
+  --color-accent-strong: #a5b2ff;
+  --color-mint: #3ad6b8;
+  --color-danger: #e5484d;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    @apply overflow-hidden overscroll-none bg-bg font-sans text-sm text-fg antialiased select-none;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+
+  input,
+  select {
+    font-size: max(16px, 1em);
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  input[type='range'] {
+    accent-color: var(--color-accent);
+  }
+}

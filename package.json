@@ -1,0 +1,41 @@
+{
+  "name": "keyfall",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run wasm && vite",
+    "build": "bun run wasm && vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "tauri": "tauri",
+    "wasm": "cargo build -p keyfall-dsp-wasm --target wasm32-unknown-unknown --profile wasm && cp target/wasm32-unknown-unknown/wasm/keyfall_dsp_wasm.wasm src/lib/audio/dsp.wasm",
+    "test": "cargo test -p keyfall-dsp -p keyfall-room -p keyfall && bun test tests",
+    "room": "bun run build && cargo run -p keyfall-room --release -- --static dist",
+    "room:dev": "cargo run -p keyfall-room -- --port 7777",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build --apk",
+    "bench:relay": "k6 run bench/relay.k6.js",
+    "bench:latency": "bun bench/relay-latency.ts",
+    "bench:dsp": "cargo run -q -p keyfall-dsp --release --example render && bun run wasm && bun bench/dsp-wasm.ts",
+    "bench:audio": "bun run wasm && bun bench/audio.ts",
+    "check:studio": "bun run wasm && bun bench/check-studio.ts"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tailwindcss/vite": "^4.3.5",
+    "@tauri-apps/cli": "^2",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "^24.19.2",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.7",
+    "tailwindcss": "^4.3.5",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.6"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tonejs/midi": "^2.0.28",
+    "uqr": "^0.1.3"
+  }
+}
