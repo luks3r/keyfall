@@ -81,7 +81,7 @@ export function bindKeyboard(player: Player) {
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || inputFocus.blocked || scopeForTarget(e.target) !== 'performance') return
     const studio = player.studioKeys
-    if (e.code === 'Escape' && !studio?.launchMode && e.target instanceof HTMLElement && e.target.matches('[data-performance-surface]')) {
+    if (e.code === 'Escape' && !settings.editing && !studio?.launchMode && e.target instanceof HTMLElement && e.target.matches('[data-performance-surface]')) {
       e.preventDefault(); e.target.blur(); return
     }
     if (studio && e.code === 'Tab' && !settings.editing && e.target instanceof HTMLElement && !!e.target.closest('[data-performance-surface]')) {

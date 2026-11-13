@@ -213,6 +213,8 @@
       if (previous !== null && --fingers[previous] === 0) player.release(previous)
     }
     const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      canvas.focus({preventScroll:true})
       const midi = hit(e.offsetX, e.offsetY)
       if (midi === null) return
       e.preventDefault()

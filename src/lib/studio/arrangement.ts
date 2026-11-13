@@ -9,7 +9,8 @@ export function findAvailableStart(clips: readonly Clip[], requested: number, le
   }
   return start
 }
-export function resizeBounds(clip: Clip, requestedLength: number, grid: number): Pick<Clip,'length'|'repeat'> {
+export function resizeBounds(clip: Clip, requestedLength: number, grid: number): Pick<Clip,'length'|'repeat'|'looped'> {
   const length = Math.max(grid, snap(requestedLength, grid))
-  return { length, repeat: clip.repeat < clip.length ? clip.repeat : length }
+  const looped = clip.looped ?? (clip.repeat > 0 && clip.repeat !== clip.length)
+  return looped ? { length, repeat: clip.repeat, looped: true } : { length, repeat: length }
 }

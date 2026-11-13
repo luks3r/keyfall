@@ -15,6 +15,7 @@
   const keyFor = new Map([...LAUNCH_KEYS].map(([code, cell]) => [`${cell.track}:${cell.scene}`, code]))
 
   const project = $derived(studio.project)
+  const currentClip = $derived(studio.track?.slots[studio.selectedScene] ?? null)
   const column = $derived(compact.current ? 92 : 124)
 
   let holding = 0
@@ -60,8 +61,8 @@
 <div class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
   <div class="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-2">
     <span class="mr-auto text-xs text-muted">{studio.track?.name ?? 'Choose a track'} · session</span>
-    {#if studio.clip && studio.track}
-      <button type="button" class="h-8 px-3 bg-raised" aria-label="Edit selected clip" onclick={() => studio.openClipEditor(studio.track!.id, studio.clip!.id)}>Edit clip</button>
+    {#if currentClip && studio.track}
+      <button type="button" class="h-8 px-3 bg-raised" aria-label="Edit selected clip" onclick={() => studio.openClipEditor(studio.track!.id, currentClip!.id)}>Edit clip</button>
     {:else if studio.track}
       <button type="button" class="h-8 px-3 bg-raised" aria-label="Create session clip" onclick={() => { const clip = studio.addSlotClip(studio.track!, studio.selectedScene); studio.openClipEditor(studio.track!.id, clip.id) }}>New clip</button>
     {/if}

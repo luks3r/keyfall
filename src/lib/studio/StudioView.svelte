@@ -44,18 +44,18 @@
 <svelte:window onkeydown={onKey} />
 
 {#snippet panel(spec: PanelSpec)}
-  <div class="@container grid min-h-0 min-w-0">
+  <div class="@container grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)]">
     {#if spec.id === 'keyboard'}
       <KeysPanel {player} />
     {:else if spec.id === 'steps'}
       {#if studio.clip && studio.track}
-        <div class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]"><ClipActions track={studio.track} clip={studio.clip} onedit={(editor) => studio.openClipEditor(studio.track!.id, studio.clip!.id, editor)} /><StepSequencer track={studio.track} clip={studio.clip} color={trackColor(index)} /></div>
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0 grid-rows-[auto_minmax(0,1fr)]"><ClipActions track={studio.track} clip={studio.clip} onedit={(editor) => studio.openClipEditor(studio.track!.id, studio.clip!.id, editor)} /><StepSequencer track={studio.track} clip={studio.clip} color={trackColor(index)} /></div>
       {:else}
         <p class="p-4 text-muted">Select a clip to sequence it, or create one in the Session grid.</p>
       {/if}
     {:else if spec.id === 'notes'}
       {#if studio.clip && studio.track}
-        <div class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]"><ClipActions track={studio.track} clip={studio.clip} onedit={(editor) => studio.openClipEditor(studio.track!.id, studio.clip!.id, editor)} /><PianoRoll track={studio.track} clip={studio.clip} channel={trackChannel(index)} color={trackColor(index)} /></div>
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0 grid-rows-[auto_minmax(0,1fr)]"><ClipActions track={studio.track} clip={studio.clip} onedit={(editor) => studio.openClipEditor(studio.track!.id, studio.clip!.id, editor)} /><PianoRoll track={studio.track} clip={studio.clip} channel={trackChannel(index)} color={trackColor(index)} /></div>
       {:else}
         <p class="p-4 text-muted">Select a clip to edit its notes, or tap a selected track's lane to add one.</p>
       {/if}
@@ -68,19 +68,19 @@
 {/snippet}
 
 {#snippet bottomDock()}
-  <div class="grid min-h-0 border-t border-line">
+  <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0 border-t border-line">
     <Dock zone="bottom" {panels} {panel} onclose={narrow ? undefined : () => layout.setOpen(AREA.bottom, false)} />
   </div>
 {/snippet}
 
 {#snippet sideDock()}
-  <div class="grid min-h-0 border-l border-line">
+  <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0 border-l border-line">
     <Dock zone="side" {panels} {panel} onclose={() => layout.setOpen(AREA.side, false)} />
   </div>
 {/snippet}
 
 {#snippet keyboard()}
-  <div class="grid min-h-0 border-t border-line"><KeysPanel {player} /></div>
+  <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0 border-t border-line"><KeysPanel {player} /></div>
 {/snippet}
 
 {#snippet arrangement()}
@@ -96,7 +96,7 @@
 {/snippet}
 
 {#if focused}
-  <section class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]" aria-label="Studio focused workspace">
+  <section class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0 grid-rows-[auto_minmax(0,1fr)]" aria-label="Studio focused workspace">
     <nav class="flex items-center gap-1 border-b border-line bg-surface px-2 py-1" aria-label="Studio surfaces">
       {#each [{id:'project',label:'Project'},{id:'editor',label:'Edit'},{id:'performance',label:'Play'}] as item}
         <Button aria-pressed={layout.surface===item.id} onclick={()=>layout.surface=item.id as typeof layout.surface}>{item.label}</Button>
@@ -104,16 +104,16 @@
       <span class="flex-1"></span>
       <Button onclick={()=>layout.inspectorOpen=true} aria-label="Track sound controls">Sound</Button>
     </nav>
-    <div class="grid min-h-0" style:display={layout.surface==='project'?'grid':'none'}>{@render arrangement()}</div>
-    <div class="grid min-h-0" style:display={layout.surface==='editor'?'grid':'none'}>
+    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0" style:display={layout.surface==='project'?'grid':'none'}>{@render arrangement()}</div>
+    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0" style:display={layout.surface==='editor'?'grid':'none'}>
       {@render panel({id:studio.clipEditor,title:'Clip editor',zone:'bottom'})}
     </div>
-    <div class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]" style:display={layout.surface==='performance'?'grid':'none'}>
+    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0 grid-rows-[auto_minmax(0,1fr)]" style:display={layout.surface==='performance'?'grid':'none'}>
       <div class="flex items-center gap-2 border-b border-line px-2 py-1">
         <Button aria-pressed={performance==='keyboard'} onclick={()=>performance='keyboard'}>Keyboard</Button>
         <Button aria-pressed={performance==='pads'} onclick={()=>performance='pads'}>Pads</Button>
       </div>
-      <div class="grid min-h-0" style:display={performance==='keyboard'?'grid':'none'}>{@render keyboard()}</div>
+      <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] min-h-0" style:display={performance==='keyboard'?'grid':'none'}>{@render keyboard()}</div>
       {#if performance==='pads' && studio.track}<PadsPanel {player} track={studio.track} color={trackColor(index)} />{/if}
     </div>
   </section>

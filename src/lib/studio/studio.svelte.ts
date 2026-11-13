@@ -397,6 +397,8 @@ export class Studio implements TransportKeys, Capture {
 
   /** Creates an empty looping clip in a session slot. */
   addSlotClip(track: Track, scene: number, length = this.project.loopBars * this.project.beatsPerBar) {
+    const existing = track.slots[scene]
+    if (existing) { this.selectSlot(track.id, scene); return existing }
     const clip = createClip(0, length)
     this.edit(() => (track.slots[scene] = clip))
     this.selectSlot(track.id, scene)
@@ -445,7 +447,7 @@ export class Studio implements TransportKeys, Capture {
     const clip = this.project.tracks.find(t => t.id === trackId)?.clips.find(c => c.id === clipId)
     if (!clip || !Number.isFinite(start) || !Number.isFinite(length)) return
     const grid = gridFor(this.arrangementSnap, this.project.beatsPerBar)
-    const next = { start: Math.max(0, Math.round(start / grid) * grid), ...resizeBounds(clip, length, grid) }
+    const next = { start: Math.max(0, Math.round(start / grid) * grid), ...(length === clip.length ? { length: clip.length, repeat: clip.repeat } : resizeBounds(clip, length, grid)) }
     if (clip.start === next.start && clip.length === next.length && clip.repeat === next.repeat) return
     this.edit(() => Object.assign(clip, next))
   }

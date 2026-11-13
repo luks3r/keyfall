@@ -24,6 +24,22 @@ test('resize preserves repeat mode and source notes', () => {
   expect(clipNotes(ordinary)).toHaveLength(1)
   expect(JSON.stringify(ordinary.notes)).toBe(source)
   ordinary.repeat=2
-  expect(resizeBounds(ordinary,4,1)).toEqual({length:4,repeat:2})
+  expect(resizeBounds(ordinary,4,1)).toEqual({length:4,repeat:2,looped:true})
   expect(resizeBounds(ordinary,-2,.25).length).toBe(.25)
+})
+test('repeating period survives shortening below and exactly to its period',()=>{
+  for(const length of [2,4]){
+    const clip=createClip(0,8);clip.repeat=4
+    Object.assign(clip,resizeBounds(clip,length,1))
+    Object.assign(clip,resizeBounds(clip,8,1))
+    expect(clip.repeat).toBe(4)
+  }
+})
+
+test('repeat editing metadata survives project serialization',()=>{
+  let clip=createClip(0,8);clip.repeat=4
+  Object.assign(clip,resizeBounds(clip,4,1))
+  clip=JSON.parse(JSON.stringify(clip))
+  Object.assign(clip,resizeBounds(clip,8,1))
+  expect(clip.repeat).toBe(4)
 })

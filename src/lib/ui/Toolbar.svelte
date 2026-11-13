@@ -30,7 +30,7 @@
   let { items, label }: { items: ToolItem[]; label: string } = $props()
 
   const GAP = 4
-  const MORE = 36
+  const MORE = 44
 
   let width = $state(0)
   let widths = $state<Record<string, number>>({})

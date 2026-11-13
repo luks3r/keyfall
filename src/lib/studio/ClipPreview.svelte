@@ -4,6 +4,7 @@
 
   let { clip, color, zoom }: { clip: Clip; color: string; zoom: number } = $props()
   let canvas: HTMLCanvasElement
+  let height = $state(0)
 
   const PADDING = 4
 
@@ -11,7 +12,7 @@
     void theme.revision
     const { notes, length, repeat, quantize } = clip
     const width = Math.max(1, Math.round(length * zoom))
-    const height = canvas.clientHeight
+    if (height <= 0) return
     const dpr = devicePixelRatio || 1
     canvas.width = width * dpr
     canvas.height = height * dpr
@@ -42,4 +43,4 @@
   })
 </script>
 
-<canvas bind:this={canvas} class="pointer-events-none absolute inset-0 h-full" style:width="{clip.length * zoom}px"></canvas>
+<canvas bind:this={canvas} bind:clientHeight={height} class="pointer-events-none absolute inset-0 h-full" style:width="{clip.length * zoom}px"></canvas>

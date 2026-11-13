@@ -2,7 +2,7 @@ import { createSong, handFor, type Song } from '../song'
 
 /** Times are in beats. A clip plays `notes` from its start; content longer than `repeat` loops, which launcher slots will reuse. */
 export type ClipNote = { pitch: number; start: number; length: number; velocity: number }
-export type Clip = { id: string; start: number; length: number; repeat: number; quantize: number; notes: ClipNote[] }
+export type Clip = { id: string; start: number; length: number; repeat: number; quantize: number; notes: ClipNote[]; /** Preserves repeat intent when a clip is trimmed to its period or shorter. */ looped?: boolean }
 /** A drum or sample pad: plays `sample` (see `src/lib/audio/samples.ts`) when `midi` is hit. */
 export type Pad = { midi: number; name: string; sample: string | null }
 /**

@@ -4,7 +4,7 @@
   let { anchor, point, returnFocus, onclose, children }: { anchor?: HTMLElement; point?: {x: number; y: number}; returnFocus?: HTMLElement; onclose: () => void; children: Snippet } = $props()
   let menu: HTMLDivElement
   let position = $state({ top: 0, left: 0 })
-  const items = () => [...menu.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]')].filter(e => !e.hasAttribute('disabled'))
+  const items = () => [...menu.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex="0"]')].filter(e => !e.hasAttribute('disabled'))
   $effect(() => {
     if (!menu) return
     const a = anchor?.getBoundingClientRect()
@@ -22,8 +22,15 @@
     if (!menu.contains(e.target as Node) && !anchor?.contains(e.target as Node)) onclose()
   }
   function key(e: KeyboardEvent) {
-    if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); onclose(); return }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onclose(); return }
     const list = items()
+    if (e.key === 'Tab' && list.length) {
+      e.preventDefault(); e.stopPropagation()
+      const index = list.indexOf(document.activeElement as HTMLElement)
+      list[(index + (e.shiftKey ? -1 : 1) + list.length) % list.length].focus()
+      return
+    }
+    if (e.target instanceof HTMLElement && e.target.matches('input,select,textarea')) return
     if (['ArrowDown','ArrowUp','Home','End'].includes(e.key) && list.length) {
       e.preventDefault(); e.stopPropagation()
       const index = list.indexOf(document.activeElement as HTMLElement)

@@ -9,7 +9,7 @@ let failures = 0
 function check(name: string, ok: unknown) { console.log(`${ok ? '✓' : '✗'} ${name}`); if (!ok) failures++ }
 await withPage('/', async ({ ev, call, errors }) => {
   const pause = () => Bun.sleep(250)
-  const click = async (selector: string) => { await ev(`document.querySelector(${JSON.stringify(selector)})?.click()`); await pause() }
+  const click = async (selector: string) => { const ok = await ev(`(() => { const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;e.click();return true })()`);if(!ok)throw new Error('Missing action: '+selector); await pause() }
   const key = async (code: string, key: string, extra = {}) => {
     await call('Input.dispatchKeyEvent', { type: 'keyDown', code, key, ...extra })
     await call('Input.dispatchKeyEvent', { type: 'keyUp', code, key, ...extra })
@@ -87,6 +87,10 @@ await withPage('/', async ({ ev, call, errors }) => {
       await Bun.sleep(600)
       check('precise resize preserves source notes',await ev(`(() => {const c=JSON.parse(localStorage.getItem('keyfall.project.v1')).tracks[0].clips;return c[0].length===4&&c[1].length===2&&c[1].notes.length===1})()`))
       check('clip preview uses colored pixels', await ev(`(() => {const c=document.querySelector('[data-arrangement-clip] canvas');if(!c)return false;const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;return [...d].some((v,i)=>i%4!==3&&v>0)})()`))
+      await ev(`(() => {const p=JSON.parse(localStorage.getItem('keyfall.project.v1'));p.tracks[0].clips=[{id:'fraction',start:0,length:4.5,repeat:4.5,quantize:0,notes:[]}];localStorage.setItem('keyfall.project.v1',JSON.stringify(p));location.reload()})()`);await Bun.sleep(900)
+      await click('[data-arrangement-clip]');await click('[aria-label="Edit selected clip"]')
+      await ev(`(() => {const e=document.querySelector('[aria-label="Clip start beat"]');e.value='1';e.dispatchEvent(new Event('change',{bubbles:true}))})()`);await Bun.sleep(600)
+      check('start-only edits preserve fractional duration and period',await ev(`(() => {const c=JSON.parse(localStorage.getItem('keyfall.project.v1')).tracks[0].clips[0];return c.start===1&&c.length===4.5&&c.repeat===4.5})()`))
       await shot('arrangement-light')
       await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true})
       await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});await pause()
@@ -114,6 +118,28 @@ await withPage('/', async ({ ev, call, errors }) => {
     check('new clip defaults to Steps', await ev(`!!document.querySelector('[aria-label="Step grid"]')`))
     await click('[aria-label="Edit in Notes"]')
     check('visible Notes action opens note editor', await ev(`!!document.querySelector('[aria-label="Note grid"]')`))
+    await ev(`document.querySelector('[aria-label="Settings"]')?.focus()`)
+    await click('[aria-label="Settings"]');await click('[aria-label="Close"]')
+    const piano=await ev(`(() => {const r=document.querySelector('[data-performance-surface]')?.getBoundingClientRect();return r?{x:r.x+20,y:r.bottom-12}:null})()`)
+    if(piano){await call('Input.dispatchMouseEvent',{type:'mousePressed',...piano,button:'left',buttons:1});await call('Input.dispatchMouseEvent',{type:'mouseReleased',...piano,button:'left',buttons:0})}
+    check('clicking piano resumes keyboard focus after controls',await ev(`document.activeElement?.matches('[data-performance-surface]')`))
+    await click('[aria-label="Settings"]')
+    await ev(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Customize'||b.textContent==='Edit keys')?.click()`);await pause()
+    if(piano){await call('Input.dispatchMouseEvent',{type:'mousePressed',...piano,button:'left',buttons:1});await call('Input.dispatchMouseEvent',{type:'mouseReleased',...piano,button:'left',buttons:0})}
+    await key('F2','F2');await pause()
+    check('custom key binding works after leaving Settings',await ev(`JSON.parse(localStorage.getItem('keyfall.settings.v2')).custom.F2 !== undefined`))
+    await key('Escape','Escape')
+    if(piano){await call('Input.dispatchMouseEvent',{type:'mousePressed',...piano,button:'left',buttons:1});await call('Input.dispatchMouseEvent',{type:'mouseReleased',...piano,button:'left',buttons:0})}
+    await key('F3','F3');await pause()
+    check('Escape ends custom key binding',await ev(`JSON.parse(localStorage.getItem('keyfall.settings.v2')).custom.F3 === undefined`))
+    await Bun.sleep(600)
+    const originalSlot=await ev(`JSON.parse(localStorage.getItem('keyfall.project.v1')).tracks[0].slots[0].id`)
+    await ev(`location.reload()`);await Bun.sleep(900)
+    await ev(`(document.querySelector('[aria-label="Create session clip"]')??document.querySelector('[aria-label="Edit selected clip"]'))?.click()`);await Bun.sleep(600)
+    check('session entry after reload preserves existing clip',originalSlot===await ev(`JSON.parse(localStorage.getItem('keyfall.project.v1')).tracks[0].slots[0].id`))
+
+
+
   }
   if (run('focus') || run('menus')) {
     await reset()
@@ -135,9 +161,17 @@ await withPage('/', async ({ ev, call, errors }) => {
     await key('Escape', 'Escape')
     await key('Tab', 'Tab')
     check('ordinary Tab leaves performance and navigates', await ev(`!document.activeElement?.matches('[data-performance-surface]')`))
+    await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await pause()
+    await ev(`[...document.querySelectorAll('[aria-label="More"]')].at(-1)?.click()`);await pause()
+    await key('Tab','Tab')
+    check('overflow controls are reachable with Tab',await ev(`!!document.activeElement?.closest('[role="menu"]')&&document.activeElement?.matches('input,select,button')`))
+    await key('Escape','Escape')
+    await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});await pause()
+
   }
   if(run('adaptive')) {
     await reset()
+    await click('[aria-label="Create session clip"]')
     for(const [width,height] of [[390,844],[844,390],[768,1024],[1280,800],[1920,1080]]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<1000})
       await call('Emulation.setTouchEmulationEnabled',{enabled:width<1000,maxTouchPoints:1})
@@ -145,6 +179,9 @@ await withPage('/', async ({ ev, call, errors }) => {
       check(`no chrome overflow ${width}×${height}`,await ev(`document.documentElement.scrollWidth <= innerWidth`))
       check(`transport visible ${width}×${height}`,await ev(`(() => {const e=document.querySelector('[aria-label="Play"] button[title="Play / Stop (Space)"], button[title="Play / Stop (Space)"]');const r=e?.getBoundingClientRect();return !!r&&r.width>0&&r.x>=0&&r.right<=innerWidth})()`))
       if(width<1100||height<760) {
+        await ev(`[...document.querySelectorAll('[aria-label="Studio surfaces"] button')].find(b=>b.textContent==='Edit')?.click()`);await pause()
+        check(`editor controls fit ${width}×${height}`,await ev(`(() => {const e=document.querySelector('[aria-label="Edit in Notes"]');const r=e?.getBoundingClientRect();return !!r&&r.width>0&&r.x>=0&&r.right<=innerWidth})()`))
+
         await ev(`[...document.querySelectorAll('[aria-label="Studio surfaces"] button')].find(b=>b.textContent==='Play')?.click()`);await pause()
         check(`performance reachable ${width}×${height}`,await ev(`(() => {const e=document.querySelector('[data-performance-surface]');return !!e&&e.getBoundingClientRect().height>40})()`))
         await ev(`[...document.querySelectorAll('[aria-label="Studio surfaces"] button')].find(b=>b.textContent==='Project')?.click()`)

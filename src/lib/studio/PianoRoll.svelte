@@ -186,7 +186,7 @@
   </div>
 {/snippet}
 
-<div class="grid h-full min-h-0 grid-rows-[auto_1fr]">
+<div class="grid min-w-0 grid-cols-[minmax(0,1fr)] h-full min-h-0 grid-rows-[auto_1fr]">
   <div class="flex border-b border-line px-2 py-1">
     <Toolbar label="Notes" {items} />
   </div>
