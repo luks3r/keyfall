@@ -29,6 +29,8 @@ pub struct Config {
     pub max_blob: usize,
     pub blob_budget: usize,
     pub messages_per_second: f64,
+    /// Codes that lead nowhere (no such room, wrong PIN) one IP may try per minute, so hidden rooms can't be guessed.
+    pub misses_per_minute: u32,
 }
 
 impl Config {
@@ -41,6 +43,7 @@ impl Config {
             max_blob: 1 << 20,
             blob_budget: 64 << 20,
             messages_per_second: 200.,
+            misses_per_minute: 20,
         }
     }
 
@@ -164,6 +167,17 @@ pub(crate) struct Server {
     blobs: Mutex<Blobs>,
     urls: Vec<String>,
     counter: AtomicU64,
+    misses: Mutex<HashMap<IpAddr, Misses>>,
+}
+
+const MISS_WINDOW: Duration = Duration::from_secs(60);
+/// Above this many tracked addresses, ones whose window has passed are forgotten.
+const MISS_TRACKING: usize = 4096;
+
+/// Failed lookups from one address in the current minute.
+struct Misses {
+    count: u32,
+    since: Instant,
 }
 
 fn now_ms() -> f64 {
@@ -180,7 +194,31 @@ fn clean_name(raw: &str) -> String {
 
 impl Server {
     pub(crate) fn new(config: Config, urls: Vec<String>) -> Self {
-        Self { config, rooms: Mutex::default(), blobs: Mutex::default(), urls, counter: AtomicU64::new(0) }
+        Self { config, rooms: Mutex::default(), blobs: Mutex::default(), urls, counter: AtomicU64::new(0), misses: Mutex::default() }
+    }
+
+    /// Whether `ip` may look up another code this minute.
+    fn may_look_up(&self, ip: IpAddr) -> bool {
+        let misses = self.misses.lock().expect("misses lock");
+        misses.get(&ip).is_none_or(|m| m.since.elapsed() >= MISS_WINDOW || m.count < self.config.misses_per_minute)
+    }
+
+    /// Counts a code from `ip` that led nowhere.
+    fn missed(&self, ip: IpAddr) {
+        let mut misses = self.misses.lock().expect("misses lock");
+        if misses.len() > MISS_TRACKING {
+            misses.retain(|_, m| m.since.elapsed() < MISS_WINDOW);
+        }
+        let entry = misses.entry(ip).or_insert(Misses { count: 0, since: Instant::now() });
+        if entry.since.elapsed() >= MISS_WINDOW {
+            *entry = Misses { count: 0, since: Instant::now() };
+        }
+        entry.count += 1;
+    }
+
+    /// A room's public summary by code, without joining it; `None` when there's no such room.
+    fn find(&self, code: &str) -> Option<Value> {
+        self.rooms.lock().expect("rooms lock").get(code).map(|room| room.summary(code))
     }
 
     fn info(&self) -> Value {
@@ -294,6 +332,7 @@ impl Connection {
         match (kind, self.room.clone()) {
             ("list", _) => self.send(&self.server.list()),
             ("info", _) => self.send(&self.server.info()),
+            ("find", _) => self.find(&message),
             ("ping", _) => self.send(&json!({ "t": "pong", "c": message["c"], "s": now_ms() })),
             ("create", None) => self.create(identity, &message),
             ("join", None) => self.join(identity, &message),
@@ -368,7 +407,23 @@ impl Connection {
         self.enter(identity, &code, &message["profile"]);
     }
 
+    /// Answers whether a code is a room here (with its summary), so clients can tell which server has it.
+    fn find(&mut self, message: &Value) {
+        if !self.server.may_look_up(self.ip) {
+            return self.fail(error::TOO_MANY, "too many codes that lead nowhere; wait a minute", false);
+        }
+        let code = clean_code(message["code"].as_str().unwrap_or_default());
+        let room = self.server.find(&code);
+        if room.is_none() {
+            self.server.missed(self.ip);
+        }
+        self.send(&json!({ "t": "found", "code": code, "room": room }));
+    }
+
     fn join(&mut self, identity: Identity, message: &Value) {
+        if !self.server.may_look_up(self.ip) {
+            return self.fail(error::TOO_MANY, "too many codes that lead nowhere; wait a minute", false);
+        }
         let code = clean_code(message["code"].as_str().unwrap_or_default());
         let check = {
             let rooms = self.server.rooms.lock().expect("rooms lock");
@@ -381,7 +436,12 @@ impl Connection {
         };
         match check {
             Ok(()) => self.enter(identity, &code, &message["profile"]),
-            Err((code, text)) => self.fail(code, text, false),
+            Err((code, text)) => {
+                if code == error::NOT_FOUND || code == error::PIN {
+                    self.server.missed(self.ip);
+                }
+                self.fail(code, text, false)
+            }
         }
     }
 

@@ -1,6 +1,9 @@
 import { engine, PEER_CHANNELS, type SoundData } from '../audio/engine.svelte'
 import { sound } from '../audio/sound.svelte'
-import { platform, type HostInfo, type Socket } from '../platform'
+import { isNative, platform, type HostInfo, type Socket } from '../platform'
+import { cleanAddress, DEFAULT_PORT, serverProblem, socketUrl } from './address'
+
+export { cleanAddress, DEFAULT_PORT, socketUrl } from './address'
 import type { NetLink, Player, Transport } from '../player.svelte'
 import { parseMidiBytes, toMidi, type Song } from '../song'
 import {
@@ -81,22 +84,11 @@ const PALETTE = ['#f472b6', '#60a5fa', '#34d399', '#c084fc', '#fb923c', '#facc15
 const PING_MS = 3000
 const TRANSPORT_MS = 500
 const PROFILE_THROTTLE_MS = 150
-const RECENT_SERVERS = 5
 const RECONNECT_ATTEMPTS = 6
 const RECONNECT_MAX_MS = 8000
-const PROBE_TIMEOUT_MS = 3000
+const ANSWER_TIMEOUT_MS = 3000
 const BLOB_TIMEOUT_MS = 10_000
-export const DEFAULT_PORT = 7777
 
-/** Accepts `host`, `host:port`, `http(s)://…` or `ws(s)://…` and returns the socket URL. */
-export function socketUrl(server: string) {
-  const trimmed = server.trim().replace(/\/+$/, '')
-  const withScheme = /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `http://${trimmed.includes(':') ? trimmed : `${trimmed}:${DEFAULT_PORT}`}`
-  const url = new URL(withScheme)
-  url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:'
-  url.pathname = '/ws'
-  return url.toString()
-}
 
 export function inviteUrl(server: string, code: string) {
   const url = new URL(socketUrl(server))
@@ -108,12 +100,35 @@ export function inviteUrl(server: string, code: string) {
 
 const serverKey = (server: string) => new URL(socketUrl(server || location.host)).host
 
-type Stored = { name: string; server: string; recent: string[] }
+/** `servers`: the ones this player added. Older versions kept `recent` (the last few used) instead. */
+type Stored = { name: string; server: string; servers: string[]; recent?: string[] }
+
+/** `?server=` from an invite or a rooms-only server's redirect; App removes it from the address bar. */
+export const linkedServer = typeof location === 'undefined' ? '' : (new URLSearchParams(location.search).get('server') ?? '')
+
+/**
+ * Room servers the site lists in `/servers.json` (a JSON array of addresses), for an app hosted apart from its
+ * servers. Anything else there (a missing file, the app's index page) means "rooms are on this page's server".
+ */
+async function configuredServers(): Promise<string[]> {
+  if (isNative) return []
+  try {
+    const response = await fetch('/servers.json', { cache: 'no-store' })
+    const list: unknown = response.ok ? await response.json() : []
+    return Array.isArray(list) ? list.filter((s): s is string => typeof s === 'string' && !!s.trim()) : []
+  } catch {
+    return []
+  }
+}
 
 function loadStored(): Stored {
-  const defaults: Stored = { name: '', server: '', recent: [] }
+  const defaults: Stored = { name: '', server: '', servers: [] }
   try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }
+    const stored: Stored = { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }
+    if (!stored.servers.length && stored.recent) stored.servers = stored.recent
+    // A server reached through an invite or picked before stays in the list, so it can be found again.
+    for (const server of [linkedServer, stored.server]) if (server && !stored.servers.includes(server)) stored.servers.push(server)
+    return stored
   } catch {
     return defaults
   }
@@ -129,10 +144,10 @@ class ProtocolError extends Error {
 }
 
 /** Connects and completes the `hello` → `info` handshake. */
-async function open(server: string): Promise<{ socket: Socket; info: ServerInfo }> {
+export async function open(server: string): Promise<{ socket: Socket; info: ServerInfo }> {
   const socket = await platform.connect(socketUrl(server || location.host))
   const info = await new Promise<ServerInfo>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('No answer')), PROBE_TIMEOUT_MS)
+    const timeout = setTimeout(() => reject(new Error('No answer')), ANSWER_TIMEOUT_MS)
     socket.onmessage = (frame) => {
       if (typeof frame !== 'string') return
       const message = JSON.parse(frame) as ServerMessage
@@ -149,29 +164,13 @@ async function open(server: string): Promise<{ socket: Socket; info: ServerInfo 
   return { socket, info }
 }
 
-/** Server info, its public rooms and the round trip it took — without joining anything. */
-export async function probe(server: string): Promise<Listing> {
-  const { socket, info } = await open(server)
-  try {
-    const started = performance.now()
-    const rooms = await new Promise<RoomInfo[]>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('No answer')), PROBE_TIMEOUT_MS)
-      socket.onmessage = (frame) => {
-        if (typeof frame !== 'string') return
-        const message = JSON.parse(frame) as ServerMessage
-        if (message.t !== 'rooms') return
-        clearTimeout(timeout)
-        resolve(message.rooms)
-      }
-      socket.send(JSON.stringify({ t: 'list' }))
-    })
-    return { server, info, rooms, ping: Math.round(performance.now() - started) }
-  } finally {
-    socket.close()
-  }
-}
+/** `others`: servers still to ask when a code isn't on the current one. */
+type Intent = { kind: 'create'; options: RoomOptions } | { kind: 'join'; code: string; pin: string; others: string[]; home: string }
 
-type Intent = { kind: 'create'; options: RoomOptions } | { kind: 'join'; code: string; pin: string }
+
+/** Plain-language reason a server can't be reached from this page. */
+export const reachProblem = (server: string, error?: unknown) =>
+  serverProblem(server, typeof location === 'undefined' ? 'http:' : location.protocol, error instanceof ProtocolError && error.code === 'version')
 
 export class Room implements NetLink {
   status = $state<RoomStatus>('idle')
@@ -185,8 +184,11 @@ export class Room implements NetLink {
   seat = $state<number | null>(null)
   peers = $state.raw(new Map<number, Peer>())
   name = $state(stored.name || `Player ${Math.floor(Math.random() * 900 + 100)}`)
-  server = $state(stored.server)
-  recent = $state<string[]>(stored.recent)
+  server = $state(linkedServer || stored.server)
+  /** Servers this player added; with `configured` and the page's own, the lobby shows these. */
+  servers = $state<string[]>(stored.servers)
+  /** Servers this site is set up with; empty when rooms run on the page's own server. */
+  configured = $state<string[]>([])
   hosting = $state<HostInfo | null>(null)
   lanUrls = $state<string[]>([])
   ping = $state<number | null>(null)
@@ -209,11 +211,25 @@ export class Room implements NetLink {
   constructor(player: Player) {
     this.#player = player
     void platform.hosting?.().then((info) => (this.hosting = info))
+    void configuredServers().then((list) => {
+      this.configured = list
+      if (!this.server) this.server = list[0] ?? ''
+    })
   }
 
-  /** Invite link others can open; prefers the LAN address while hosting from this device. */
+  /**
+   * Invite link others can open. In a browser on a remote server it's this page with `?server=`, so it works
+   * wherever the app is hosted; otherwise the server's own address (it serves the app, or redirects to it), preferring
+   * the LAN address while hosting from this device.
+   */
   get invite() {
     if (!this.code) return ''
+    if (!isNative && !this.hosting && this.server && /^https?:$/.test(location.protocol)) {
+      const url = new URL(location.pathname, location.origin)
+      url.searchParams.set('server', this.server)
+      url.hash = `room=${this.code}`
+      return url.toString()
+    }
     const server = this.server || location.host
     const loopback = /^(localhost|127\.|\[?::1\]?)/.test(server.replace(/^[a-z]+:\/\//i, ''))
     return inviteUrl(this.hosting?.urls[0] ?? ((loopback && this.lanUrls[0]) || server), this.code)
@@ -296,8 +312,44 @@ export class Room implements NetLink {
     return this.#begin({ kind: 'create', options })
   }
 
-  join(code: string, pin = '') {
-    return this.#begin({ kind: 'join', code: code.trim().toUpperCase(), pin })
+  /** Joins by code. `servers` are tried in order after the current one, so a code works without picking its server. */
+  join(code: string, pin = '', servers: string[] = []) {
+    const others = [...new Set(servers)].filter((s) => s !== this.server)
+    return this.#begin({ kind: 'join', code: code.trim().toUpperCase(), pin, others, home: this.server })
+  }
+
+  /** Adds a server to this player's list and makes it the one new rooms go to. */
+  addServer(address: string) {
+    const server = cleanAddress(address)
+    if (!server) return ''
+    if (!this.servers.includes(server)) this.servers = [...this.servers, server]
+    this.server = server
+    this.#remember()
+    return server
+  }
+
+  removeServer(server: string) {
+    this.servers = this.servers.filter((s) => s !== server)
+    if (this.server === server) this.server = this.configured[0] ?? ''
+    this.#remember()
+  }
+
+  /** Picks where new rooms go. */
+  useServer(server: string) {
+    this.server = server
+    this.#remember()
+  }
+
+  /** The code wasn't on this server (or it didn't answer): try the next one. */
+  #tryNext(): boolean {
+    const intent = this.#intent
+    if (intent?.kind !== 'join' || !intent.others.length || this.#attempt) return false
+    const [next, ...others] = intent.others
+    this.#teardown()
+    this.#intent = { ...intent, others }
+    this.server = next
+    void this.#connect()
+    return true
   }
 
   leave() {
@@ -344,21 +396,22 @@ export class Room implements NetLink {
     } catch (error) {
       console.warn(error)
       if (this.#attempt) return this.#reconnect()
+      if (this.#tryNext()) return
       this.#fail(
-        error instanceof ProtocolError
-          ? error.code
-          : null,
+        error instanceof ProtocolError ? error.code : null,
         error instanceof ProtocolError
           ? error.message
           : this.server
-            ? `No room server answers at ${this.server}.`
-            : 'No room server behind this page. Run "bun run room:dev", host from the desktop app, or enter a server address.',
+            ? reachProblem(this.server, error)
+            : "There's no room server here yet. Add one under Servers, or start one from the desktop app.",
       )
     }
   }
 
   #fail(code: ErrorCode | null, message: string) {
     const intent = this.#intent
+    // A search that found nothing leaves the player's chosen server as it was.
+    if (intent?.kind === 'join' && code !== 'pin') this.server = intent.home
     this.leave()
     if (intent?.kind === 'join' && code === 'pin') this.#intent = null
     this.errorCode = code
@@ -379,9 +432,8 @@ export class Room implements NetLink {
   }
 
   #remember() {
-    if (this.server) this.recent = [this.server, ...this.recent.filter((s) => s !== this.server)].slice(0, RECENT_SERVERS)
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ name: this.name, server: this.server, recent: this.recent }))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ name: this.name, server: this.server, servers: this.servers }))
     } catch {}
   }
 
@@ -487,7 +539,8 @@ export class Room implements NetLink {
         this.peers = new Map(message.peers.map(({ id, tag, profile }) => [id, this.#peer(id, tag, profile)]))
         this.status = 'connected'
         this.#attempt = 0
-        this.#intent = { kind: 'join', code: message.room.code, pin: this.#intent?.kind === 'join' ? this.#intent.pin : (this.#intent?.options.pin ?? '') }
+        // Reconnects rejoin this room on this server; no searching other servers.
+        this.#intent = { kind: 'join', code: message.room.code, pin: this.#intent?.kind === 'join' ? this.#intent.pin : (this.#intent?.options.pin ?? ''), others: [], home: this.server }
         this.#remember()
         player.net = this
         if (message.state.song) void this.#applySong(message.state.song, message.state.transport)
@@ -500,6 +553,7 @@ export class Room implements NetLink {
         return
       }
       case 'error':
+        if (this.status !== 'connected' && message.code === 'not_found' && this.#tryNext()) return
         if (this.status !== 'connected') return this.#fail(message.code, ERROR_TEXT[message.code] ?? message.message)
         this.error = ERROR_TEXT[message.code] ?? message.message
         if (message.code === 'full') this.setSeat(null)

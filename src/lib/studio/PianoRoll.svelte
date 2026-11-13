@@ -1,33 +1,45 @@
+<script lang="ts" module>
+  /** Pixels per beat at each zoom step. */
+  export const ZOOMS = [16, 24, 32, 48, 64, 96, 128]
+</script>
+
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { preserveScroll, restoreScroll } from '../ui/adaptive'
   import { MediaQuery } from 'svelte/reactivity'
   import { engine } from '../audio/engine.svelte'
   import { noteName } from '../input/keymaps'
-  import Button from '../ui/Button.svelte'
-  import Icon from '../ui/Icon.svelte'
-  import Select, { type Option } from '../ui/Select.svelte'
-  import Toolbar, { type ToolItem } from '../ui/Toolbar.svelte'
-  import { QUANTIZE_GRIDS, snap, type Clip, type ClipNote, type Track } from './project'
+  import { patternView } from './pattern.svelte'
+  import { snap, type Clip, type ClipNote, type Track } from './project'
   import { isKit, studio } from './studio.svelte'
 
-  let { track, clip, channel, color }: { track: Track; clip: Clip; channel: number; color: string } = $props()
+  /**
+   * Notes of one clip on a pitch × time grid; the device knobs drive snap, quantize, zoom and length.
+   * Click empty space to add a note, drag on it to select; drag notes to move, their right edge to resize,
+   * Alt-drag to copy; double-click or right-click a note to delete it; ⌘/Ctrl-scroll zooms. The selection is the
+   * Pattern screen's (shared with the step grid); its keys live there.
+   */
+  let {
+    track,
+    clip,
+    channel,
+    color,
+    grid = $bindable(0.25),
+    zoomIndex = $bindable(3),
+  }: { track: Track; clip: Clip; channel: number; color: string; grid?: number; zoomIndex?: number } = $props()
 
   const compact = new MediaQuery('(pointer: coarse)')
-  const ZOOMS = [16, 24, 32, 48, 64, 96, 128]
   const EDGE = 8
   const DRAG_SLOP = 3
   const AUDITION_MS = 220
+  const DEFAULT_VELOCITY = 0.8
   const BLACK = [false, true, false, true, false, false, true, false, true, false, true, false]
-  const GRID_NAMES: Record<number, string> = { 1: '1/4', 0.5: '1/8', 0.25: '1/16', [1 / 3]: '1/8 triplet', 0.125: '1/32' }
-  const gridOptions: Option[] = QUANTIZE_GRIDS.filter(Boolean).map((g) => ({ value: String(g), label: GRID_NAMES[g] }))
-  const quantizeOptions: Option[] = QUANTIZE_GRIDS.map((g) => ({ value: String(g), label: g ? `Quantize ${GRID_NAMES[g]}` : 'No quantize' }))
   const PITCHES = Array.from({ length: 128 }, (_, i) => 127 - i)
 
-  let zoomIndex = $state(3)
-  let grid = $state(0.25)
-  let selected = $state(new Set<ClipNote>())
+  const selected = $derived(new Set(patternView.selection(clip)))
   let scroller: HTMLDivElement
+  let lane: HTMLDivElement
+  let marquee = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
 
   const kit = $derived(isKit(track))
   /** Kit tracks show one row per pad, named; other tracks show every pitch. */
@@ -48,20 +60,19 @@
     const local = studio.position - clip.start
     return local >= 0 && local < clip.length ? local : null
   })
-  const row = $derived(kit ? (compact.current ? 28 : 22) : compact.current ? 20 : 14)
+  const row = $derived(kit ? (compact.current ? 28 : 22) : compact.current ? 22 : 18)
   const zoom = $derived(ZOOMS[zoomIndex])
   const bar = $derived(studio.project.beatsPerBar)
   const width = $derived(clip.length * zoom)
 
-  type Drag = { kind: 'move' | 'resize'; x: number; y: number; origins: Map<ClipNote, ClipNote>; moved: boolean; lastPitch: number }
+  type Drag = { kind: 'move' | 'resize'; x: number; y: number; origins: Map<ClipNote, ClipNote>; moved: boolean; lastPitch: number; copy: boolean }
   let drag: Drag | null = null
 
   $effect(() => {
     void clip.id
-    selected = new Set()
     const notes = untrack(() => clip.notes)
     const center = notes.length ? notes.reduce((sum, n) => sum + n.pitch, 0) / notes.length : 60
-    queueMicrotask(() => scroller && !restoreScroll(scroller,`notes:${clip.id}`) && (scroller.scrollTop = (rowOf.get(Math.round(center)) ?? 127 - center) * row - scroller.clientHeight / 2))
+    queueMicrotask(() => scroller && !restoreScroll(scroller, `notes:${clip.id}`) && (scroller.scrollTop = (rowOf.get(Math.round(center)) ?? 127 - center) * row - scroller.clientHeight / 2))
   })
 
   function audition(pitch: number, velocity = 0.7) {
@@ -69,34 +80,74 @@
     setTimeout(() => voice.stop(), AUDITION_MS)
   }
 
-  const point = (e: MouseEvent) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    return { beat: (e.clientX - rect.left) / zoom, pitch: rows[Math.floor((e.clientY - rect.top) / row)]?.pitch ?? -1 }
+  const local = (e: MouseEvent) => {
+    const rect = lane.getBoundingClientRect()
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
   }
 
-  function onGridClick(e: MouseEvent) {
-    const { beat, pitch } = point(e)
-    const start = Math.floor(beat / grid) * grid
+  /** Empty space: a click adds a note, a drag selects the notes it covers (Shift adds to the selection). */
+  function onLaneDown(e: PointerEvent) {
+    if (e.button !== 0) return
+    lane.setPointerCapture(e.pointerId)
+    scroller.focus({ preventScroll: true })
+    const start = local(e)
+    patternView.insert = Math.max(0, Math.min(clip.length, Math.floor(start.x / zoom / grid) * grid))
+    const keep = e.shiftKey ? new Set(selected) : new Set<ClipNote>()
+    let moved = false
+    const move = (event: PointerEvent) => {
+      const at = local(event)
+      if (!moved && Math.hypot(at.x - start.x, at.y - start.y) < DRAG_SLOP) return
+      moved = true
+      marquee = { x0: start.x, y0: start.y, x1: at.x, y1: at.y }
+      const [left, right] = [Math.min(start.x, at.x) / zoom, Math.max(start.x, at.x) / zoom]
+      const [top, bottom] = [Math.floor(Math.min(start.y, at.y) / row), Math.floor(Math.max(start.y, at.y) / row)]
+      const hit = clip.notes.filter((n) => {
+        const index = rowOf.get(n.pitch) ?? -1
+        const begin = snap(n.start, clip.quantize)
+        return index >= top && index <= bottom && begin < right && begin + n.length > left
+      })
+      patternView.select([...keep, ...hit])
+    }
+    const up = () => {
+      lane.removeEventListener('pointermove', move)
+      lane.removeEventListener('pointerup', up)
+      lane.removeEventListener('pointercancel', up)
+      marquee = null
+      if (!moved && e.shiftKey) patternView.select(keep)
+      else if (!moved) addAt(start.x, start.y)
+    }
+    lane.addEventListener('pointermove', move)
+    lane.addEventListener('pointerup', up)
+    lane.addEventListener('pointercancel', up)
+  }
+
+  function addAt(x: number, y: number) {
+    const pitch = rows[Math.floor(y / row)]?.pitch ?? -1
+    const start = Math.floor(x / zoom / grid) * grid
     if (start >= clip.length || pitch < 0 || pitch > 127) return
-    const note: ClipNote = { pitch, start, length: grid, velocity: 0.8 }
+    const note: ClipNote = { pitch, start, length: grid, velocity: DEFAULT_VELOCITY }
     studio.edit(() => clip.notes.push(note))
-    selected = new Set([clip.notes.at(-1)!])
+    patternView.select([clip.notes.at(-1)!])
     audition(pitch)
   }
 
   function onNoteDown(e: PointerEvent, note: ClipNote) {
     e.stopPropagation()
+    if (e.button === 2) return
+    scroller.focus({ preventScroll: true })
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    if (e.shiftKey) selected = new Set(selected.has(note) ? [...selected].filter((n) => n !== note) : [...selected, note])
-    else if (!selected.has(note)) selected = new Set([note])
+    if (e.shiftKey) patternView.select(selected.has(note) ? [...selected].filter((n) => n !== note) : [...selected, note])
+    else if (!selected.has(note)) patternView.select([note])
+    patternView.insert = Math.floor(note.start / grid) * grid
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     drag = {
       kind: rect.right - e.clientX < EDGE ? 'resize' : 'move',
       x: e.clientX,
       y: e.clientY,
-      origins: new Map([...selected].map((n) => [n, { ...n }])),
+      origins: new Map(patternView.selection(clip).map((n) => [n, { ...n }])),
       moved: false,
       lastPitch: note.pitch,
+      copy: e.altKey,
     }
     audition(note.pitch, note.velocity)
   }
@@ -109,6 +160,8 @@
       if (Math.hypot(dx, dy) < DRAG_SLOP) return
       drag.moved = true
       studio.commit()
+      // Alt-drag leaves copies where the notes were and moves the originals.
+      if (drag.copy && drag.kind === 'move') clip.notes.push(...[...drag.origins.values()].map((n) => ({ ...n })))
     }
     const beats = Math.round(dx / zoom / grid) * grid
     const steps = Math.round(dy / row)
@@ -128,70 +181,37 @@
     }
   }
 
-  function remove() {
-    if (!selected.size) return
-    studio.edit(() => (clip.notes = clip.notes.filter((n) => !selected.has(n))))
-    selected = new Set()
+  function deleteNotes(notes: Set<ClipNote>) {
+    if (!notes.size) return
+    studio.edit(() => (clip.notes = clip.notes.filter((n) => !notes.has(n))))
   }
 
-  function resizeClip(bars: number) {
-    const length = Math.max(bar, clip.length + bars * bar)
-    studio.edit(() => {
-      if (clip.repeat >= clip.length) clip.repeat = length
-      clip.length = length
-    })
-  }
-
-  const items: ToolItem[] = $derived([
-    { id: 'where', label: 'Clip', priority: 1, content: where, menu: where },
-    { id: 'grid', label: 'Grid', priority: 7, content: gridSelect, menu: gridSelect },
-    { id: 'quantize', label: 'Quantize', priority: 6, content: quantizeSelect, menu: quantizeSelect },
-    { id: 'length', label: 'Clip length', priority: 5, content: lengthControl, menu: lengthControl },
-    { id: 'zoom-out', label: 'Zoom out', icon: 'minus', priority: 4, onclick: () => (zoomIndex = Math.max(0, zoomIndex - 1)) },
-    { id: 'zoom-in', label: 'Zoom in', icon: 'plus', priority: 4, onclick: () => (zoomIndex = Math.min(ZOOMS.length - 1, zoomIndex + 1)) },
-    { id: 'gap', spacer: true },
-    { id: 'delete-notes', label: 'Delete notes (Del)', icon: 'trash', priority: 8, disabled: !selected.size, onclick: remove },
-    { id: 'duplicate', label: 'Duplicate clip after itself', icon: 'copy', priority: 3, onclick: () => studio.duplicateClip(track, clip) },
-    { id: 'delete-clip', label: 'Delete clip', text: 'Delete clip', priority: 2, onclick: () => studio.removeClip(track, clip.id) },
-  ])
-
-  function onKey(e: KeyboardEvent) {
-    if ((e.code === 'Delete' || (e.code === 'Backspace' && selected.size)) && !(e.target instanceof HTMLInputElement)) {
-      e.preventDefault()
-      e.stopPropagation()
-      remove()
-    }
+  async function onWheel(e: WheelEvent) {
+    if (!e.ctrlKey && !e.metaKey) return
+    e.preventDefault()
+    const x = e.clientX - scroller.getBoundingClientRect().left
+    const beat = (scroller.scrollLeft + x - keys) / zoom
+    zoomIndex = Math.max(0, Math.min(ZOOMS.length - 1, zoomIndex + (e.deltaY < 0 ? 1 : -1)))
+    await tick()
+    scroller.scrollLeft = Math.max(0, beat * zoom - x + keys)
   }
 </script>
 
-<svelte:window onkeydowncapture={onKey} />
-
-{#snippet where()}
-  <span class="truncate px-1 text-xs text-muted">{track.name} · {scene >= 0 ? `scene ${studio.project.scenes[scene]?.name}` : `bar ${Math.floor(clip.start / bar) + 1}`}</span>
-{/snippet}
-
-{#snippet gridSelect()}
-  <div class="w-28"><Select bind:value={() => String(grid), (v) => (grid = Number(v))} options={gridOptions} /></div>
-{/snippet}
-
-{#snippet quantizeSelect()}
-  <div class="w-40"><Select bind:value={() => String(clip.quantize), (v) => studio.edit(() => (clip.quantize = Number(v)))} options={quantizeOptions} /></div>
-{/snippet}
-
-{#snippet lengthControl()}
-  <div class="flex items-center" title="Clip length">
-    <Button variant="ghost" shape="square" onclick={() => resizeClip(-1)} aria-label="Shorter clip"><Icon name="minus" /></Button>
-    <span class="min-w-[5ch] text-center text-xs tabular-nums">{Math.round((clip.length / bar) * 100) / 100} bar</span>
-    <Button variant="ghost" shape="square" onclick={() => resizeClip(1)} aria-label="Longer clip"><Icon name="plus" /></Button>
-  </div>
-{/snippet}
-
-<div class="grid min-w-0 grid-cols-[minmax(0,1fr)] h-full min-h-0 grid-rows-[auto_1fr]">
-  <div class="flex border-b border-line px-2 py-1">
-    <Toolbar label="Notes" {items} />
-  </div>
-
-  <div bind:this={scroller} use:preserveScroll={`notes:${clip.id}`} class="relative min-h-0 overflow-auto overscroll-contain" role="group" aria-label="Note grid" onpointermove={onMove} onpointerup={() => (drag = null)} onpointercancel={() => (drag = null)}>
+<div class="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[1fr]">
+  <div
+    bind:this={scroller}
+    use:preserveScroll={`notes:${clip.id}`}
+    class="relative min-h-0 overflow-auto overscroll-contain outline-none"
+    role="group"
+    tabindex="-1"
+    data-pattern-editor
+    aria-label="Note grid"
+    onpointermove={onMove}
+    onpointerup={() => (drag = null)}
+    onpointercancel={() => (drag = null)}
+    onwheel={onWheel}
+    oncontextmenu={(e) => e.preventDefault()}
+  >
     <div class="relative flex" style:height="{rows.length * row}px" style:width="{keys + width}px">
       <div class="sticky left-0 z-10 shrink-0 bg-surface" style:width="{keys}px">
         {#each rows as { pitch, label } (pitch)}
@@ -203,15 +223,17 @@
             ]}
             style:height="{row}px"
             onpointerdown={() => audition(pitch)}
+            title="Hear {noteName(pitch)}"
             tabindex="-1">{label}</button
           >
         {/each}
       </div>
       <div
-        class="relative"
+        bind:this={lane}
+        class="relative touch-none"
         style:width="{width}px"
         style:background-image="repeating-linear-gradient(90deg, var(--color-grid-strong) 0 1px, transparent 1px {bar * zoom}px), repeating-linear-gradient(90deg, var(--color-grid) 0 1px, transparent 1px {zoom}px), repeating-linear-gradient(180deg, var(--color-grid-faint) 0 1px, transparent 1px {row}px)"
-        onclick={onGridClick}
+        onpointerdown={onLaneDown}
         role="presentation"
       >
         {#if clip.repeat < clip.length}
@@ -221,25 +243,36 @@
           {@const start = snap(note.start, clip.quantize)}
           {@const index = rowOf.get(note.pitch)}
           {#if index !== undefined}
-          <div
-            class={['absolute cursor-grab touch-none rounded-[3px]', selected.has(note) && 'ring-2 ring-fg']}
-            style:left="{start * zoom}px"
-            style:top="{index * row + 1}px"
-            style:width="{Math.max(4, note.length * zoom - 1)}px"
-            style:height="{row - 2}px"
-            style:background={color}
-            style:opacity={0.45 + note.velocity * 0.55}
-            onpointerdown={(e) => onNoteDown(e, note)}
-            onclick={(e) => e.stopPropagation()}
-            onkeydown={(e) => e.key === 'Enter' && (selected = new Set([note]))}
-            role="button"
-            tabindex="0"
-            aria-label="{noteName(note.pitch)} at beat {Math.round(start * 100) / 100 + 1}"
-          >
-            <span class="absolute inset-y-0 right-0 w-2 cursor-ew-resize"></span>
-          </div>
+            <div
+              class={['absolute cursor-grab touch-none rounded-[3px]', selected.has(note) && 'ring-2 ring-fg']}
+              style:left="{start * zoom}px"
+              style:top="{index * row + 1}px"
+              style:width="{Math.max(4, note.length * zoom - 1)}px"
+              style:height="{row - 2}px"
+              style:background={color}
+              style:opacity={0.45 + note.velocity * 0.55}
+              onpointerdown={(e) => onNoteDown(e, note)}
+              ondblclick={(e) => (e.stopPropagation(), deleteNotes(new Set([note])))}
+              oncontextmenu={(e) => (e.preventDefault(), e.stopPropagation(), deleteNotes(new Set([note])))}
+              onkeydown={(e) => e.key === 'Enter' && patternView.select([note])}
+              role="button"
+              tabindex="-1"
+              aria-label="{noteName(note.pitch)} at beat {Math.round(start * 100) / 100 + 1}"
+            >
+              <span class="absolute inset-y-0 right-0 w-2 cursor-ew-resize"></span>
+            </div>
           {/if}
         {/each}
+        {#if marquee}
+          <div
+            class="pointer-events-none absolute border border-fg/70 bg-fg/10"
+            style:left="{Math.min(marquee.x0, marquee.x1)}px"
+            style:top="{Math.min(marquee.y0, marquee.y1)}px"
+            style:width="{Math.abs(marquee.x1 - marquee.x0)}px"
+            style:height="{Math.abs(marquee.y1 - marquee.y0)}px"
+          ></div>
+        {/if}
+        <div class="pointer-events-none absolute inset-y-0 w-0 border-l-2 border-dashed border-accent/70" style:left="{patternView.insert * zoom}px"></div>
         {#if playhead !== null}
           <div class="pointer-events-none absolute inset-y-0 w-px bg-accent" style:left="{playhead * zoom}px"></div>
         {/if}

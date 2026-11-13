@@ -1,5 +1,5 @@
 import { untrack } from 'svelte'
-import { scopeForTarget, type InputScope } from './focus'
+import { noteFocusSource, scopeForTarget, type InputScope } from './focus'
 class InputFocus {
   scope = $state<InputScope>('performance')
   blocked = $state(false)
@@ -12,10 +12,17 @@ class InputFocus {
   }
   start() {
     const sync = () => { untrack(() => this.scope = scopeForTarget(document.activeElement)) }
+    addEventListener('pointerdown', noteFocusSource, true)
+    addEventListener('keydown', noteFocusSource, true)
     addEventListener('focusin', sync)
     addEventListener('focusout', sync)
     sync()
-    return () => { removeEventListener('focusin', sync); removeEventListener('focusout', sync) }
+    return () => {
+      removeEventListener('pointerdown', noteFocusSource, true)
+      removeEventListener('keydown', noteFocusSource, true)
+      removeEventListener('focusin', sync)
+      removeEventListener('focusout', sync)
+    }
   }
 }
 export const inputFocus = new InputFocus()

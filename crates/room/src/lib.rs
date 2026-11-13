@@ -8,7 +8,7 @@ pub use server::Config;
 
 use axum::extract::ws::WebSocketUpgrade;
 use axum::extract::{ConnectInfo, State};
-use axum::http::{header, StatusCode, Uri};
+use axum::http::{header, HeaderMap, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::serve::ListenerExt;
@@ -25,6 +25,25 @@ const MAX_FRAME_BYTES: usize = 2 << 20;
 
 pub trait Assets: Send + Sync + 'static {
     fn get(&self, path: &str) -> Option<(Vec<u8>, String)>;
+
+    /// Where the web app lives when this server doesn't carry it; page requests are sent there.
+    fn app_url(&self) -> Option<&str> {
+        None
+    }
+}
+
+/// A rooms-only server that points browsers at a web app hosted elsewhere. Visitors land on
+/// `<app>/?server=<this host>` (an invite's `#room=` fragment survives the redirect), so the app joins here.
+pub struct ElsewhereAssets(pub String);
+
+impl Assets for ElsewhereAssets {
+    fn get(&self, _: &str) -> Option<(Vec<u8>, String)> {
+        None
+    }
+
+    fn app_url(&self) -> Option<&str> {
+        Some(&self.0)
+    }
 }
 
 pub struct NoAssets;
@@ -100,15 +119,28 @@ pub async fn serve(listener: TcpListener, assets: Arc<dyn Assets>, config: Confi
 const ISOLATION: [(&str, &str); 2] =
     [("cross-origin-opener-policy", "same-origin"), ("cross-origin-embedder-policy", "require-corp")];
 
-async fn static_file(State(app): State<App>, uri: Uri) -> Response {
+async fn static_file(State(app): State<App>, uri: Uri, headers: HeaderMap) -> Response {
     let path = match uri.path() {
         "/" => "/index.html",
         path => path,
     };
-    match app.assets.get(path).or_else(|| app.assets.get("/index.html")) {
-        Some((bytes, mime)) => ([(header::CONTENT_TYPE.as_str(), mime.as_str()), ISOLATION[0], ISOLATION[1]], bytes).into_response(),
+    if let Some((bytes, mime)) = app.assets.get(path).or_else(|| app.assets.get("/index.html")) {
+        return ([(header::CONTENT_TYPE.as_str(), mime.as_str()), ISOLATION[0], ISOLATION[1]], bytes).into_response();
+    }
+    match app.assets.app_url() {
+        Some(url) => {
+            let host = headers.get(header::HOST).and_then(|h| h.to_str().ok()).unwrap_or_default();
+            (StatusCode::FOUND, [(header::LOCATION, app_location(url, host))]).into_response()
+        }
         None => (StatusCode::NOT_FOUND, "keyfall room server: no web app bundled").into_response(),
     }
+}
+
+/// `<app>/?server=<host>`; a host with anything but host:port characters is left out rather than passed on.
+fn app_location(app: &str, host: &str) -> String {
+    let app = app.trim_end_matches('/');
+    let valid = !host.is_empty() && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'));
+    if valid { format!("{app}/?server={host}") } else { format!("{app}/") }
 }
 
 async fn upgrade(ws: WebSocketUpgrade, State(app): State<App>, ConnectInfo(address): ConnectInfo<SocketAddr>) -> Response {
@@ -118,6 +150,13 @@ async fn upgrade(ws: WebSocketUpgrade, State(app): State<App>, ConnectInfo(addre
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sends_visitors_to_the_app_with_this_server() {
+        assert_eq!(app_location("https://keyfall.app/", "rooms.example.com"), "https://keyfall.app/?server=rooms.example.com");
+        assert_eq!(app_location("https://keyfall.app", "10.0.0.2:7777"), "https://keyfall.app/?server=10.0.0.2:7777");
+        assert_eq!(app_location("https://keyfall.app", "evil.com/?x=<"), "https://keyfall.app/");
+    }
 
     #[test]
     fn prefers_home_lan_over_vpn_addresses() {

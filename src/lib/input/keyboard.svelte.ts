@@ -1,5 +1,5 @@
 import { inputFocus } from './focus.svelte'
-import { scopeForTarget } from './focus'
+import { isTyping, scopeForTarget } from './focus'
 import { platform } from '../platform'
 import { DEFAULT_VELOCITY, type Player } from '../player.svelte'
 import { settings } from '../settings.svelte'
@@ -14,7 +14,7 @@ const ACTIONS: Record<string, (player: Player) => void> = {
   ArrowDown: (p) => p.shift(-12),
   ArrowLeft: (p) => (p.studioKeys ? p.studioKeys.step(-1) : p.seek(p.time - SEEK_STEP)),
   ArrowRight: (p) => (p.studioKeys ? p.studioKeys.step(1) : p.seek(p.time + SEEK_STEP)),
-  Backspace: (p) => (p.studioKeys ? p.studioKeys.restart() : p.restart()),
+  Backspace: (p) => (p.studioKeys ? p.studioKeys.back() : p.restart()),
 }
 
 function editKey(e: KeyboardEvent) {
@@ -25,13 +25,6 @@ function editKey(e: KeyboardEvent) {
   if (e.code === 'Backspace' || e.code === 'Delete') settings.unbind(target)
   else if (!RESERVED.has(e.code)) settings.bind(e.shiftKey && settings.keymap.shifted ? SHIFT + e.code : e.code, target)
 }
-
-const NON_TEXT_INPUTS = new Set(['range', 'checkbox', 'radio', 'button', 'file'])
-
-const isTyping = (target: EventTarget | null) =>
-  (target instanceof HTMLInputElement && !NON_TEXT_INPUTS.has(target.type)) ||
-  target instanceof HTMLTextAreaElement ||
-  (target instanceof HTMLElement && target.isContentEditable)
 
 const MIDI_MAX = 127
 

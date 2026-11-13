@@ -1,3 +1,4 @@
+import type { SynthPatch } from '../audio/patch'
 import { createSong, handFor, type Song } from '../song'
 
 /** Times are in beats. A clip plays `notes` from its start; content longer than `repeat` loops, which launcher slots will reuse. */
@@ -19,6 +20,8 @@ export type Track = {
   clips: Clip[]
   slots: (Clip | null)[]
   pads: Pad[]
+  /** The track's own tweaks of its synth preset, made with the Sound knobs; absent plays the preset as is. */
+  patch?: SynthPatch
 }
 export type Scene = { id: string; name: string }
 export type Loop = { enabled: boolean; start: number; end: number }

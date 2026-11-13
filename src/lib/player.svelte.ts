@@ -23,7 +23,9 @@ export const Mark = { Pending: 0, Hit: 1, Auto: 2 } as const
 export interface TransportKeys {
   toggle(): void
   record(): void
-  restart(): void
+  /** Backspace: back to the start, or in step input, erase the previous step. */
+  back(): void
+  /** ←/→: a bar, or in step input, one step. */
   step(direction: 1 | -1): void
   /** Keys launch clips instead of playing notes. */
   readonly launchMode: boolean
@@ -216,9 +218,10 @@ export class Player implements NoteSink {
     const notes = this.#notes.get(midi) ?? [midi]
     this.#notes.delete(midi)
     for (const note of notes) {
-      this.#sound(note, -1)
-      engine.keyOff(engine.liveChannel, note, sounded)
-      this.sandbox.noteOff(note)
+      // Another held key may share this note (overlapping chords): the engine counts holds, the rest waits for the last.
+      const still = this.#sound(note, -1) > 0
+      engine.keyOff(engine.liveChannel, note, sounded, still)
+      if (!still) this.sandbox.noteOff(note)
       if (this.playable) this.net?.noteOff(note)
     }
     this.dirty = true
@@ -226,9 +229,10 @@ export class Player implements NoteSink {
 
   /** Counts keys sounding each note, so overlapping chords light and stop correctly. */
   #sound(note: number, change: 1 | -1) {
-    const count = (this.sounding.get(note) ?? 0) + change
+    const count = Math.max(0, (this.sounding.get(note) ?? 0) + change)
     if (count > 0) this.sounding.set(note, count)
     else this.sounding.delete(note)
+    return count
   }
 
   setSustain(on: boolean, sounded = false) {

@@ -17,7 +17,7 @@
   import Select, { type Option } from './ui/Select.svelte'
   import Toggle from './ui/Toggle.svelte'
 
-  let { midi, onclose, onsynth }: { midi: MidiPorts; onclose: () => void; onsynth: () => void } = $props()
+  let { midi, onclose, onsynth, onshortcuts }: { midi: MidiPorts; onclose: () => void; onsynth: () => void; onshortcuts: () => void } = $props()
 
   const NONE = ''
   const SOUND_HINT = { loading: 'Loading…', ready: '', error: 'Failed to load' }
@@ -106,6 +106,7 @@
         <Button class="flex-1" onclick={() => settings.resetCustom()}>Reset</Button>
       {/if}
     </div>
+    <Button onclick={onshortcuts}>Keyboard shortcuts</Button>
     <div class="flex items-center justify-between text-xs text-muted">
       Transpose
       <div class="flex items-center">

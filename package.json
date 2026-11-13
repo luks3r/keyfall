@@ -2,6 +2,7 @@
   "name": "keyfall",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "bun run wasm && vite",
@@ -19,7 +20,8 @@
     "bench:latency": "bun bench/relay-latency.ts",
     "bench:dsp": "cargo run -q -p keyfall-dsp --release --example render && bun run wasm && bun bench/dsp-wasm.ts",
     "bench:audio": "bun run wasm && bun bench/audio.ts",
-    "check:studio": "bun run wasm && bun bench/check-studio.ts"
+    "check:device": "bun run wasm && bun bench/check-device.ts",
+    "check:rooms": "bun run build && cargo build -q --release -p keyfall-room && bun bench/check-rooms.ts"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

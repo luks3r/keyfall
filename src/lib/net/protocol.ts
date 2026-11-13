@@ -96,16 +96,17 @@ export function tokenFor(server: string): string {
   return tokens[server]
 }
 
-export type ErrorCode = 'version' | 'protocol' | 'not_found' | 'pin' | 'full' | 'limit' | 'banned' | 'forbidden' | 'too_large'
+export type ErrorCode = 'version' | 'protocol' | 'not_found' | 'pin' | 'full' | 'limit' | 'banned' | 'forbidden' | 'too_large' | 'too_many'
 
 export const ERROR_TEXT: Record<ErrorCode, string> = {
-  version: 'This server speaks a different protocol version.',
+  version: "This server runs a different version of Keyfall.",
   protocol: 'The server rejected a message.',
-  not_found: 'No room with that code.',
-  pin: 'Wrong or missing PIN.',
-  full: 'All player seats are taken.',
-  limit: 'The server cannot create more rooms right now.',
-  banned: 'You were removed from this room.',
+  not_found: "No room with that code. Check the letters and try again.",
+  pin: "This room has a PIN. Ask the host for it.",
+  full: "This room is full.",
+  limit: "This server can't make more rooms right now. Try another server.",
+  banned: "The host removed you from this room.",
   forbidden: 'Only the host can do that.',
   too_large: 'That file is too large for this server.',
+  too_many: 'Too many codes that went nowhere. Wait a minute, then try again.',
 }

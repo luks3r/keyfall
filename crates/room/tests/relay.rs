@@ -128,6 +128,30 @@ async fn relays_binary_events_from_seated_peers_only() {
 }
 
 #[tokio::test]
+async fn finds_rooms_by_code_and_throttles_guessing() {
+    let url = start(Config { misses_per_minute: 3, ..Config::public("test") }).await;
+    let (_host, welcome) = create(&url, "host-token-0009", json!({ "name": "Hidden", "public": false, "pin": "1234" })).await;
+    let code = welcome["room"]["code"].clone();
+
+    let mut seeker = connect(&url, "seek-token-0009").await;
+    send(&mut seeker, json!({ "t": "find", "code": code })).await;
+    let found = recv(&mut seeker).await;
+    assert_eq!(found["t"], "found");
+    assert_eq!(found["room"]["name"], "Hidden", "hidden rooms are found by their exact code");
+    assert_eq!(found["room"]["locked"], true);
+    assert!(found["room"].get("pin").is_none(), "the PIN never leaves the server");
+
+    for _ in 0..3 {
+        send(&mut seeker, json!({ "t": "find", "code": "ZZZZZ" })).await;
+        assert_eq!(recv(&mut seeker).await["room"], Value::Null);
+    }
+    send(&mut seeker, json!({ "t": "find", "code": code })).await;
+    assert_eq!(recv(&mut seeker).await["code"], "too_many", "after the misses even real codes wait");
+    send(&mut seeker, json!({ "t": "join", "code": code, "pin": "1234", "profile": { "name": "s", "seat": null } })).await;
+    assert_eq!(recv(&mut seeker).await["code"], "too_many", "joining is throttled too");
+}
+
+#[tokio::test]
 async fn enforces_pin_seats_and_host_rights() {
     let url = start(Config::public("test")).await;
     let (_host, welcome) = create(&url, "host-token-0003", json!({ "pin": "4321", "maxPlayers": 1 })).await;

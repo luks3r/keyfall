@@ -1,26 +1,30 @@
 <script lang="ts" module>
   export const TRACK_COLORS = Array.from({ length: 8 }, (_, i) => `var(--color-track-${i + 1})`)
   export const trackColor = (index: number) => TRACK_COLORS[index % TRACK_COLORS.length]
+  /** Pixels per beat at each zoom step. */
+  export const ARRANGEMENT_ZOOMS = [8, 12, 16, 24, 32, 48, 64]
 </script>
 <script lang="ts">
   import { preserveScroll } from '../ui/adaptive'
   import { tick } from 'svelte'
   import { MediaQuery } from 'svelte/reactivity'
-  import Button from '../ui/Button.svelte'
   import Menu from '../ui/Menu.svelte'
-  import Select from '../ui/Select.svelte'
   import { scopeForTarget } from '../input/focus'
   import { inputFocus } from '../input/focus.svelte'
-  import { layout } from '../ui/layout.svelte'
-  import { STUDIO_PANELS } from './panels'
+  import { studioUi } from './ui.svelte'
   import ClipPreview from './ClipPreview.svelte'
-  import { gridFor, overlaps, resizeBounds, type ArrangementSnap } from './arrangement'
+  import { gridFor, overlaps, resizeBounds } from './arrangement'
   import { projectEnd, type Clip, type Project, type Track } from './project'
   import { studio } from './studio.svelte'
   const compact = new MediaQuery('(max-width: 639px)')
   const coarse = new MediaQuery('(pointer: coarse)')
-  const ZOOMS = [8,12,16,24,32,48,64]
-  let zoomIndex = $state(3)
+  /**
+   * The song timeline. Double-click a lane for a new clip, drag clips to move and their right edge to resize,
+   * double-click a clip to edit it, right-click for more. Drag on the loop strip to set the loop.
+   * Snap and zoom live on the device knobs (Song screen).
+   */
+  let { zoomIndex = $bindable(3) }: { zoomIndex?: number } = $props()
+  const ZOOMS = ARRANGEMENT_ZOOMS
   let scroller: HTMLDivElement
   const zoom = $derived(ZOOMS[zoomIndex])
   const header = $derived(compact.current ? 124 : 184)
@@ -97,11 +101,13 @@
       menu={target:{kind:'clip',trackId:track.id,clipId:clip.id},point:{x:r.left,y:r.bottom},anchor};return
     }
     if(e.key==='Enter'){e.preventDefault();openClip(track,clip)}
-    else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();studio.removeClip(track,clip.id)}
-    else if((e.metaKey||e.ctrlKey)&&e.code==='KeyD'){e.preventDefault();studio.duplicateClip(track,clip)}
   }
-  function setLoop(start:number,end:number){
-    if(Number.isFinite(start)&&Number.isFinite(end)&&start>=0&&end>start)studio.edit(p=>{p.loop.start=start;p.loop.end=end})
+  /** Pressing on the loop strip outside the loop starts a new loop there and drags its end. */
+  function drawLoop(e:PointerEvent){
+    if(e.button!==0||e.target!==e.currentTarget)return
+    const start=at(e,e.currentTarget as HTMLElement)
+    studio.edit(p=>{p.loop={start,end:start+bar,enabled:true}})
+    begin(e,'loop-end',{start,length:bar,repeat:0})
   }
   async function wheel(e:WheelEvent){
     if(!e.ctrlKey&&!e.metaKey)return
@@ -115,26 +121,13 @@
 <svelte:window onblur={cancel} onkeydown={(e)=>{if(e.key==='Escape'&&drag){e.preventDefault();cancel()}}} />
 <!-- Keyboard commands are delegated from focusable clip controls. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-input-scope="arrangement" onkeydown={key} role="group" aria-label="Arrangement">
-  <div class="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-2" data-input-scope="ui">
-    <span class="mr-auto font-mono text-xs text-muted">arrange</span>
-    <Button onclick={()=>create()} aria-label="New arrangement clip">+ New clip</Button>
-    {#if studio.clip && studio.track}<Button onclick={()=>openClip(studio.track!,studio.clip!)} aria-label="Edit selected clip">Edit clip</Button>{/if}
-    <label class="flex items-center gap-2 text-xs text-muted">Snap<div class="w-24"><Select bind:value={()=>studio.arrangementSnap,v=>studio.arrangementSnap=v as ArrangementSnap} options={[{value:'bar',label:'Bar'},{value:'beat',label:'Beat'},{value:'eighth',label:'1/8'},{value:'sixteenth',label:'1/16'}]} /></div></label>
-    <Button onclick={()=>zoomIndex=Math.max(0,zoomIndex-1)} aria-label="Zoom out">−</Button><Button onclick={()=>zoomIndex=Math.min(ZOOMS.length-1,zoomIndex+1)} aria-label="Zoom in">+</Button>
-    <Button onclick={()=>studio.toggleLoop()} aria-pressed={project.loop.enabled}>Loop</Button>
-    {#if project.loop.enabled}
-      <label class="text-xs text-muted">From <input class="w-14 bg-raised px-1" type="number" aria-label="Playback loop start" min="0" value={project.loop.start} onchange={e=>{setLoop(e.currentTarget.valueAsNumber,project.loop.end);e.currentTarget.value=String(project.loop.start)}} /></label>
-      <label class="text-xs text-muted">To <input class="w-14 bg-raised px-1" type="number" aria-label="Playback loop end" min="1" value={project.loop.end} onchange={e=>{setLoop(project.loop.start,e.currentTarget.valueAsNumber);e.currentTarget.value=String(project.loop.end)}} /></label>
-    {/if}
-    {#if studio.notice}<span class="text-xs text-muted" role="status">{studio.notice}</span>{/if}
-  </div>
+<div class="grid min-h-0 grid-rows-[minmax(0,1fr)]" data-input-scope="arrangement" onkeydown={key} role="group" aria-label="Arrangement">
   <div bind:this={scroller} use:preserveScroll={'arrangement'} class="relative min-h-0 overflow-auto overscroll-contain bg-display" onwheel={wheel} onpointermove={move} onpointerup={finish} onpointercancel={cancel} onlostpointercapture={cancel} role="group" aria-label="Arrangement timeline">
     <div class="relative min-w-full" style:width="{header+width}px" style:min-height="100%">
       <div class="sticky top-0 z-20 flex h-12 border-b border-line bg-surface">
-        <div class="sticky left-0 z-30 shrink-0 border-r border-line bg-surface px-3 py-3 font-mono text-xs text-muted" style:width="{header}px">track / bars</div>
+        <div class="sticky left-0 z-30 shrink-0 border-r border-line bg-surface truncate px-3 py-3 font-mono text-xs text-muted" style:width="{header}px" role="status">{studio.notice || 'Tracks'}</div>
         <div class="relative shrink-0" style:width="{width}px">
-          <div class="absolute inset-x-0 top-0 h-4 bg-raised" aria-label="Playback loop strip" role="group">
+          <div class="absolute inset-x-0 top-0 h-4 cursor-pointer bg-raised" aria-label="Loop strip · drag to set the loop" role="group" title="Drag to set the loop" onpointerdown={drawLoop}>
             {#if project.loop.enabled}
               {@const loop=drag?.kind.startsWith('loop')?drag.proposed:{start:project.loop.start,length:project.loop.end-project.loop.start,repeat:0}}
               <div class="absolute inset-y-0 bg-mint/40 touch-none" style:left="{loop.start*zoom}px" style:width="{loop.length*zoom}px" role="presentation" onpointerdown={e=>begin(e,'loop-move',{start:project.loop.start,length:project.loop.end-project.loop.start,repeat:0})}>
@@ -163,7 +156,8 @@
               {@const preview=drag?.clipId===clip.id?drag.proposed:clip}
               {@const collision=drag?.clipId===clip.id&&overlaps(track.clips,preview.start,preview.length,clip.id)}
               {#if drag?.clipId===clip.id}<span class="pointer-events-none absolute inset-y-1 border border-dashed border-muted" style:left="{clip.start*zoom}px" style:width="{clip.length*zoom}px"></span>{/if}
-              <div data-arrangement-clip data-input-scope="arrangement" class={['absolute inset-y-1 overflow-hidden rounded border',active&&'ring-2 ring-fg',!coarse.current&&'touch-none cursor-grab']} style:left="{preview.start*zoom}px" style:width="{preview.length*zoom}px" style:background="color-mix(in srgb,{color} 20%,var(--color-display))" style:border-color={collision?'var(--color-danger)':color} role="button" tabindex="0" onkeydown={e=>{if(e.key===' '){e.preventDefault();studio.select(track.id,clip.id)}}} aria-label="Clip on {track.name} at beat {clip.start}" onfocus={()=>studio.select(track.id,clip.id)} onclick={e=>{e.stopPropagation();if(suppressClick){suppressClick=false;return}studio.select(track.id,clip.id)}} ondblclick={e=>{e.stopPropagation();if(!suppressClick)openClip(track,clip)}} onpointerdown={e=>{if(e.button!==0)return;e.currentTarget.focus({preventScroll:true});studio.select(track.id,clip.id);if(!coarse.current)begin(e,'move',clip,track.id,clip.id)}} oncontextmenu={e=>context(e,{kind:'clip',trackId:track.id,clipId:clip.id})}>
+              <!-- svelte-ignore a11y_click_events_have_key_events (keys are handled by the timeline: Enter, Delete, ⌘D) -->
+              <div data-arrangement-clip data-input-scope="arrangement" class={['absolute inset-y-1 overflow-hidden rounded border',active&&'ring-2 ring-fg',!coarse.current&&'touch-none cursor-grab']} style:left="{preview.start*zoom}px" style:width="{preview.length*zoom}px" style:background="color-mix(in srgb,{color} 20%,var(--color-display))" style:border-color={collision?'var(--color-danger)':color} role="button" tabindex="0" aria-label="Clip on {track.name} at beat {clip.start}" onfocus={()=>studio.select(track.id,clip.id)} onclick={e=>{e.stopPropagation();if(suppressClick){suppressClick=false;return}studio.select(track.id,clip.id)}} ondblclick={e=>{e.stopPropagation();if(!suppressClick)openClip(track,clip)}} onpointerdown={e=>{if(e.button!==0)return;e.currentTarget.focus({preventScroll:true});studio.select(track.id,clip.id);if(!coarse.current)begin(e,'move',clip,track.id,clip.id)}} oncontextmenu={e=>context(e,{kind:'clip',trackId:track.id,clipId:clip.id})}>
                 <ClipPreview {clip} {color} {zoom} />
                 <span class="pointer-events-none absolute top-1 left-2 font-mono text-[10px] text-fg">{drag?.clipId===clip.id?`${preview.start} · ${preview.length} beats${collision?' · overlap':''}`:`${clip.notes.length} notes`}</span>
                 {#if active && (!coarse.current||preview.length*zoom>=96)}
@@ -182,15 +176,15 @@
 {#if menu}
   <Menu point={menu.point} returnFocus={menu.anchor} onclose={()=>menu=null}>
     {#if menuTrack && menuClip}
-      <button type="button" role="menuitem" onclick={()=>studio.openClipEditor(menuTrack!.id,menuClip!.id,'steps')}>Edit in Steps</button>
-      <button type="button" role="menuitem" onclick={()=>studio.openClipEditor(menuTrack!.id,menuClip!.id,'notes')}>Edit in Notes</button>
+      <button type="button" role="menuitem" onclick={()=>studio.openClipEditor(menuTrack!.id,menuClip!.id,'steps')}>Edit as steps</button>
+      <button type="button" role="menuitem" onclick={()=>studio.openClipEditor(menuTrack!.id,menuClip!.id,'notes')}>Edit as notes</button>
       <button type="button" role="menuitem" onclick={()=>studio.duplicateClip(menuTrack!,menuClip!)}>Duplicate</button>
-      <button type="button" role="menuitem" onclick={()=>studio.loopClip(menuTrack!.id,menuClip!.id)}>Set Playback Loop to Clip</button>
-      <button type="button" role="menuitem" data-destructive onclick={()=>studio.removeClip(menuTrack!,menuClip!.id)}>Delete Clip</button>
+      <button type="button" role="menuitem" onclick={()=>studio.loopClip(menuTrack!.id,menuClip!.id)}>Loop this clip</button>
+      <button type="button" role="menuitem" data-destructive onclick={()=>studio.removeClip(menuTrack!,menuClip!.id)}>Delete clip</button>
     {:else if menuTrack && menu.target.kind==='lane'}
-      <button type="button" role="menuitem" onclick={()=>{if(menu?.target.kind==='lane')create(menu.target.trackId,menu.target.beat)}}>New Clip Here</button>
+      <button type="button" role="menuitem" onclick={()=>{if(menu?.target.kind==='lane')create(menu.target.trackId,menu.target.beat)}}>New clip here</button>
     {:else if menuTrack && menu.target.kind==='track'}
-      <button type="button" role="menuitem" onclick={()=>{studio.select(menuTrack!.id);layout.show(STUDIO_PANELS,'track')}}>Track Settings</button>
+      <button type="button" role="menuitem" onclick={()=>{studio.select(menuTrack!.id);studioUi.show('sound')}}>Track sound</button>
       <button type="button" role="menuitem" onclick={()=>studio.edit(()=>menuTrack!.muted=!menuTrack!.muted)}>{menuTrack.muted?'Unmute':'Mute'}</button>
       <button type="button" role="menuitem" onclick={()=>studio.edit(()=>menuTrack!.solo=!menuTrack!.solo)}>{menuTrack.solo?'Unsolo':'Solo'}</button>
     {/if}

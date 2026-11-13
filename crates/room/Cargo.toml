@@ -2,6 +2,7 @@
 name = "keyfall-room"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [[bin]]
 name = "keyfall-room"
@@ -14,7 +15,7 @@ local-ip-address = "0.6"
 mime_guess = "2"
 serde_json = "1"
 sha2 = "0.11"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 
 [dev-dependencies]
 tokio-tungstenite = "0.30"

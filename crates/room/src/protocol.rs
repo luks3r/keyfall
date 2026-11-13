@@ -33,6 +33,8 @@ pub mod error {
     pub const BANNED: &str = "banned";
     pub const FORBIDDEN: &str = "forbidden";
     pub const TOO_LARGE: &str = "too_large";
+    /// Too many codes that led nowhere from one address; guessing hidden rooms is throttled.
+    pub const TOO_MANY: &str = "too_many";
 }
 
 /// Size of a known event's payload; unknown kinds in the event range are bounded by `MAX_PAYLOAD`.

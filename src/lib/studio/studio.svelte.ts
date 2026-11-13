@@ -1,5 +1,4 @@
-import { layout } from '../ui/layout.svelte'
-import { STUDIO_PANELS, type ClipEditor } from './panels'
+import { encodeSynth } from '../audio/patch'
 import { findAvailableStart, gridFor, resizeBounds, type ArrangementSnap } from './arrangement'
 import { ensureClick } from '../audio/click'
 import { engine, FIRST_TRACK_CHANNEL, LOCAL_CHANNEL, TRACK_CHANNELS } from '../audio/engine.svelte'
@@ -12,6 +11,7 @@ import { settings } from '../settings.svelte'
 import type { Song } from '../song'
 import { controls, type Target } from './controls.svelte'
 import { live } from './live.svelte'
+import { studioUi } from './ui.svelte'
 import { encodePattern, encodeTimeline, STATUS, STOP_PENDING } from './engine'
 import {
   allClips,
@@ -25,6 +25,7 @@ import {
   migrate,
   toSong,
   type Clip,
+  type ClipNote,
   type Pad,
   type Project,
   type Track,
@@ -34,6 +35,8 @@ const STORAGE_KEY = 'keyfall.project.v1'
 const PREFS_KEY = 'keyfall.studio.v1'
 const SAVE_DELAY_MS = 400
 const HISTORY = 100
+/** Knob changes closer together than this form one undo step. */
+const TWEAK_GAP_MS = 800
 /** Notes played this early before a recording's first beat still count, landing on it. */
 const ANTICIPATION = 0.25
 const MIN_NOTE = 1 / 64
@@ -87,7 +90,6 @@ export class Studio implements TransportKeys, Capture {
   project = $state<Project>(load())
   view = $state<View>(prefs.view)
   selectedTrack = $state<string | null>(null)
-  clipEditor = $state<ClipEditor>('steps')
   arrangementSnap = $state<ArrangementSnap>('beat')
   insertion = $state<{trackId: string; beat: number} | null>(null)
   notice = $state('')
@@ -115,6 +117,7 @@ export class Studio implements TransportKeys, Capture {
 
   #player?: Player
   #undo: string[] = []
+  #tweaked = 0
   #redo: string[] = []
   #frame = 0
   #ids = new Map<string, number>()
@@ -267,11 +270,13 @@ export class Studio implements TransportKeys, Capture {
         void this.#loadKit(channel, $state.snapshot(track.pads))
         return
       }
-      const key = `${track.id}:${track.preset}`
+      const key = `${track.id}:${track.preset}:${JSON.stringify(track.patch ?? null)}`
       if (this.#instruments.get(channel) === key) return
       this.#instruments.set(channel, key)
       this.#kits.delete(channel)
-      void engine.setSound(channel, encodePreset(sound.find(track.preset)))
+      const preset = sound.find(track.preset)
+      const patch = track.patch && preset.kind === 'synth' ? $state.snapshot(track.patch) : null
+      void engine.setSound(channel, patch ? { data: [...encodeSynth(patch)], sampled: null } : encodePreset(preset))
     })
   }
 
@@ -319,6 +324,14 @@ export class Studio implements TransportKeys, Capture {
     if (this.#undo.length > HISTORY) this.#undo.shift()
     this.#redo = []
     this.#counts()
+  }
+
+  /** For knob turns: one undo step per gesture, not per tick. */
+  tweak(change: (project: Project) => void) {
+    const now = performance.now()
+    if (now - this.#tweaked > TWEAK_GAP_MS) this.commit()
+    this.#tweaked = now
+    change(this.project)
   }
 
   edit(change: (project: Project) => void) {
@@ -428,10 +441,10 @@ export class Studio implements TransportKeys, Capture {
     this.select(track.id, copy.id)
   }
 
-  openClipEditor(trackId: string, clipId: string, editor?: ClipEditor) {
+  /** Opens a clip on the Pattern screen: page 1 as steps, page 2 as notes. */
+  openClipEditor(trackId: string, clipId: string, editor: 'steps' | 'notes' = 'steps') {
     this.select(trackId, clipId)
-    if (editor) this.clipEditor = editor
-    layout.show(STUDIO_PANELS, this.clipEditor)
+    studioUi.show('pattern', editor === 'notes' ? 1 : 0)
   }
 
   addArrangementClip(trackId: string, requested: number) {
@@ -566,7 +579,13 @@ export class Studio implements TransportKeys, Capture {
     if (wasPlaying) this.play()
   }
 
+  back() {
+    if (this.stepInput) return this.stepErase()
+    this.restart()
+  }
+
   step(direction: 1 | -1) {
+    if (this.stepInput) return this.stepMove(direction)
     const bar = this.project.beatsPerBar
     this.seek(Math.max(0, (Math.round(this.position / bar) + direction) * bar))
   }
@@ -694,6 +713,25 @@ export class Studio implements TransportKeys, Capture {
     const clip = found.clip
     clip.notes = clip.notes.filter((n) => !(n.pitch === midi && Math.abs(n.start - start) < 1e-6))
     clip.notes.push({ pitch: midi, start, length: input.resolution, velocity })
+  }
+
+  /** Backspace in step input, as in text: removes what the previous step holds and moves back onto it. */
+  stepErase() {
+    const input = this.stepInput
+    const clip = input && this.#findClip(input.clip)?.clip
+    if (!input || !clip) return
+    this.stepMove(-1)
+    this.stepClear()
+  }
+
+  /** Removes the notes starting at the step-input cursor. */
+  stepClear() {
+    const input = this.stepInput
+    const clip = input && this.#findClip(input.clip)?.clip
+    if (!input || !clip) return
+    const from = input.cursor * input.resolution
+    const hit = (n: ClipNote) => n.start >= from - 1e-6 && n.start < from + input.resolution - 1e-6
+    if (clip.notes.some(hit)) this.edit(() => (clip.notes = clip.notes.filter((n) => !hit(n))))
   }
 
   /** Moves the step-input cursor, wrapping at the clip end. */

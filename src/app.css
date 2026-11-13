@@ -61,6 +61,8 @@
   --color-track-1: #91b6ea; --color-track-2: #6ac7a7; --color-track-3: #e9af58; --color-track-4: #d9d9c9;
   --color-track-5: #d7a0ae; --color-track-6: #b9a5df; --color-track-7: #e9ad8b; --color-track-8: #b7ca7f;
   --font-sans: 'Helvetica Neue', Arial, ui-sans-serif, system-ui, sans-serif;
+  --color-knob-blue: #4b83e8; --color-knob-green: #39b36e; --color-knob-white: #e6e6dc; --color-knob-orange: #f2782f;
+  --color-knob-cap: #1d201c; --color-knob-mark: #f4f3e6;
 }
 :root[data-theme='light'] {
   --color-bg: #e8e7e2; --color-surface: #f4f3ee; --color-raised: #deded6; --color-hover: #d0d1c7;
@@ -72,6 +74,8 @@
   --color-hand-left: #2e896d; --color-hand-left-dark: #67c4a0; --color-hand-right: #456eab; --color-hand-right-dark: #8eb5e8;
   --color-track-1: #39699c; --color-track-2: #26775a; --color-track-3: #92590c; --color-track-4: #626b55;
   --color-track-5: #9b4f65; --color-track-6: #7453a5; --color-track-7: #a45630; --color-track-8: #637c22;
+  --color-knob-blue: #3a72d6; --color-knob-green: #2e9c5c; --color-knob-white: #fbfaf3; --color-knob-orange: #ec6a1e;
+  --color-knob-cap: #2b302a; --color-knob-mark: #fbfaf3;
 }
 body { letter-spacing: .005em; }
 @media (prefers-reduced-motion: reduce) {
@@ -104,3 +108,6 @@ button[role='radio'][aria-checked='true'] { box-shadow: inset 0 -2px 0 var(--col
 .clip-actions { min-width: 0; max-width: 100%; }
 .clip-actions > span:first-child { flex: 1 1 100%; }
 @media (min-width: 1100px) { .clip-actions > span:first-child { flex: 1 1 auto; } }
+
+/* Lit mode keys and track keys are inverted; they need no extra underline. */
+.device .mode-key[aria-pressed], .device [aria-label='Tracks'] button[aria-pressed] { box-shadow: none; }
