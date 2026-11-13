@@ -1,6 +1,6 @@
 # Keyfall Instrument Redesign Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execution method has not been selected. This document authorizes no implementation by itself.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execution method: native sequential, authorized by the user’s instruction to proceed. Implementation and validation are recorded in [the delivery report](../reports/2026-11-13-instrument-redesign-validation.md).
 
 **Goal:** Deliver one coherent, playable Keyfall interface with OP-1-inspired light styling, OP-XY/OP-Z-inspired dark styling, discoverable arrangement editing, and adaptive layouts.
 

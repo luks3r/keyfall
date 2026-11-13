@@ -1,6 +1,6 @@
 # Keyfall instrument redesign
 
-Status: proposed design for user review; implementation is not started.
+Status: implemented following the user’s instruction to proceed. See [validation and implementation rulings](../reports/2026-11-13-instrument-redesign-validation.md).
 Branch: `redesign/op1-studio`. Baseline: `1513b45`.
 
 ## Intent and confirmed direction
@@ -241,4 +241,4 @@ Before calling the redesign complete:
 
 Exact accessible color values, choice of local open font, modest radius scale, icon drawings, precise adaptive thresholds, and parameter visualization details can be settled during implementation. Keep them consistent through shared tokens and components.
 
-Major unresolved product decisions: none required to evaluate this proposal. User review should confirm or change the proposed defaults and hierarchy before implementation planning.
+Implementation choices, review repairs, evidence, and remaining validation limits are recorded in the linked delivery report.
