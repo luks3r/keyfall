@@ -37,8 +37,8 @@
   const kit = $derived(isKit(track))
   const steps = $derived(Math.max(1, Math.round(clip.length / resolution)))
   const stepsPerBeat = $derived(Math.round(1 / resolution))
-  const stepWidth = $derived(Math.max(coarse.current ? 30 : 22, Math.min(48, (width - LABEL) / steps)))
-  const rowHeight = $derived(coarse.current ? 34 : 26)
+  const stepWidth = $derived(Math.max(coarse.current ? 44 : 22, Math.min(48, (width - LABEL) / steps)))
+  const rowHeight = $derived(coarse.current ? 44 : 26)
   /** Kit tracks: one row per pad, kick first as on drum machines. Melodic tracks: two octaves of the live scale from `base`, highest first. */
   const rows = $derived.by(() => {
     if (kit) return [...track.pads].sort((a, b) => a.midi - b.midi).map((pad) => ({ pitch: pad.midi, label: pad.name }))
