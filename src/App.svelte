@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { inputFocus } from './lib/input/focus.svelte'
   import { theme } from './lib/theme.svelte'
   import Progress from './lib/Progress.svelte'
   import Roll from './lib/Roll.svelte'
@@ -37,11 +38,13 @@
 
   onMount(() => {
     const stopTheme = theme.start()
+    const stopFocus = inputFocus.start()
     localizeLabels().then(() => (player.dirty = true))
     void midi.restore()
     const unbind = bindKeyboard(player)
     return () => {
       stopTheme()
+      stopFocus()
       unbind()
       room.leave()
       midi.close()

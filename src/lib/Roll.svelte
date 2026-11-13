@@ -267,7 +267,7 @@
   })
 </script>
 
-<div class="relative h-full min-h-0 w-full"><canvas bind:this={canvas}></canvas></div>
+<div class="relative h-full min-h-0 w-full"><canvas data-input-scope="performance" data-performance-surface tabindex="0" role="application" aria-label="Playable keyboard · Escape exits, Tab switches clip launch" bind:this={canvas}></canvas></div>
 
 <style>
   canvas {

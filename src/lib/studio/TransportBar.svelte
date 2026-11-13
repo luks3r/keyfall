@@ -63,7 +63,7 @@
     { id: 'redo', label: 'Redo (⇧⌘Z)', icon: 'redo', priority: 4, disabled: !studio.history.redo, onclick: () => studio.redo() },
     { id: 'track', label: 'Add track', icon: 'plus', priority: 6, disabled: project.tracks.length >= MAX_TRACKS, onclick: () => studio.addTrack() },
     { id: 'drums', label: 'Add drum track', icon: 'pads', priority: 5, disabled: project.tracks.length >= MAX_TRACKS, onclick: () => studio.addTrack(KIT, drumPads()) },
-    { id: 'launch-keys', label: 'Keys launch clips (Tab)', icon: 'grid', priority: 7, active: studio.launchMode, onclick: () => studio.toggleLaunchMode() },
+    { id: 'launch-keys', label: 'Clip Launch mode (Tab on keyboard)', text: studio.launchMode ? 'Keys: Launch' : 'Keys: Play', icon: 'grid', priority: 7, active: studio.launchMode, onclick: () => studio.toggleLaunchMode() },
     {
       id: 'learn',
       label: 'Map MIDI controller',
@@ -95,7 +95,7 @@
 {/snippet}
 
 {#snippet workspace()}
-  <span class="mr-1 size-3.5 shrink-0 rounded bg-gradient-to-br from-accent to-mint max-sm:hidden"></span>
+  <span class="mr-1 size-3.5 shrink-0 rounded-sm border border-fg bg-transparent max-sm:hidden"></span>
   <WorkspaceSwitch />
 {/snippet}
 

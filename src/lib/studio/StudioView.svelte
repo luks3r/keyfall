@@ -31,7 +31,7 @@
   })
 
   function onKey(e: KeyboardEvent) {
-    if (!(e.metaKey || e.ctrlKey) || e.code !== 'KeyZ' || e.target instanceof HTMLInputElement) return
+    if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.code !== 'KeyZ' || e.target instanceof HTMLInputElement) return
     e.preventDefault()
     if (e.shiftKey) studio.redo()
     else studio.undo()

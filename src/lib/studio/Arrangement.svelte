@@ -100,7 +100,7 @@
   }
 </script>
 
-<div class="relative min-h-0 overflow-auto overscroll-contain bg-bg" role="group" aria-label="Arrangement" onwheel={onWheel} onpointermove={onMove} onpointerup={onUp} onpointercancel={onUp}>
+<div class="relative min-h-0 overflow-auto overscroll-contain bg-bg" data-input-scope="arrangement" role="group" aria-label="Arrangement" onwheel={onWheel} onpointermove={onMove} onpointerup={onUp} onpointercancel={onUp}>
   <div class="relative min-w-full" style:width="{header + width}px" style:min-height="100%">
     <div class="sticky top-0 z-20 flex border-b border-line bg-surface" style:height="{RULER}px">
       <div class="sticky left-0 z-30 flex shrink-0 items-center justify-center gap-0.5 border-r border-line bg-surface" style:width="{header}px">
@@ -175,7 +175,7 @@
               onpointerdown={(e) => onClipDown(e, track, clip)}
               onclick={(e) => e.stopPropagation()}
               onkeydown={(e) => e.key === 'Enter' && studio.select(track.id, clip.id)}
-              role="button"
+              data-arrangement-clip role="button"
               tabindex="0"
               aria-label="Clip at bar {Math.floor(clip.start / bar) + 1}"
             >

@@ -1,3 +1,5 @@
+import { inputFocus } from './focus.svelte'
+import { scopeForTarget } from './focus'
 import { platform } from '../platform'
 import { DEFAULT_VELOCITY, type Player } from '../player.svelte'
 import { settings } from '../settings.svelte'
@@ -48,7 +50,7 @@ function syncNative(player: Player) {
       const root = player.root
       const notes: Record<string, number> = {}
       for (const [code, offset] of keys) if (root + offset >= 0 && root + offset <= MIDI_MAX) notes[code] = root + offset
-      const enabled = !settings.editing && !typing && !player.studioKeys?.launchMode
+      const enabled = !settings.editing && !typing && !inputFocus.blocked && inputFocus.scope === 'performance' && !player.studioKeys?.launchMode
       const velocity = player.studio ? (player.liveInput?.velocity ?? DEFAULT_VELOCITY) : DEFAULT_VELOCITY
       keyboard.setLayout({ enabled, shifted, velocity, notes }).then(
         (active) => (native.active = active && enabled),
@@ -77,9 +79,12 @@ export function bindKeyboard(player: Player) {
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return
+    if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || inputFocus.blocked || scopeForTarget(e.target) !== 'performance') return
     const studio = player.studioKeys
-    if (studio && e.code === 'Tab' && !settings.editing) {
+    if (e.code === 'Escape' && e.target instanceof HTMLElement && e.target.matches('[data-performance-surface]')) {
+      e.preventDefault(); e.target.blur(); return
+    }
+    if (studio && e.code === 'Tab' && !settings.editing && e.target instanceof HTMLElement && !!e.target.closest('[data-performance-surface]')) {
       e.preventDefault()
       return studio.toggleLaunchMode()
     }
@@ -107,7 +112,6 @@ export function bindKeyboard(player: Player) {
     const action = ACTIONS[e.code]
     if (!action) return
     e.preventDefault()
-    ;(document.activeElement as HTMLElement | null)?.blur()
     action(player)
   }
 

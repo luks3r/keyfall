@@ -35,18 +35,16 @@
   }
 </script>
 
-<label class={['grid gap-1', disabled && 'opacity-40']}>
-  <span class="flex justify-between text-xs text-muted">
-    {label}
-    <span class="text-fg tabular-nums">{display}{unit}</span>
-  </span>
-  <input
-    type="range"
-    min={log ? 0 : min}
-    max={log ? LOG_STEPS : max}
-    step={log ? 1 : step}
-    value={position}
-    {disabled}
-    oninput={(e) => input(e.currentTarget.valueAsNumber)}
-  />
-</label>
+<div class={['grid gap-2', disabled && 'opacity-40']}>
+  <div class="flex items-center justify-between gap-2 text-xs text-muted">
+    <span>{label}</span>
+    <span class="flex items-center gap-1 font-mono text-fg">
+      <input class="w-20 rounded border border-line bg-raised px-1 py-0.5 text-right tabular-nums" type="number" aria-label={label + ' value'} {min} {max} {step} {disabled} value={Number(display)} onchange={(e) => {
+        const next = e.currentTarget.valueAsNumber
+        if (Number.isFinite(next)) value = Math.max(min, Math.min(max, next))
+        e.currentTarget.value = String(value)
+      }} />{unit}
+    </span>
+  </div>
+  <input type="range" aria-label={label} min={log ? 0 : min} max={log ? LOG_STEPS : max} step={log ? 1 : step} value={position} {disabled} oninput={(e) => input(e.currentTarget.valueAsNumber)} />
+</div>
