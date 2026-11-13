@@ -15,6 +15,13 @@
   let name = $state('')
 
   const patch = $derived(sound.patch)
+  const envelope = $derived.by(() => {
+    const scale = 238 / (patch.attack + patch.decay + patch.release)
+    const attack = patch.attack * scale
+    const decay = attack + patch.decay * scale
+    const sustain = 58 - patch.sustain * 52
+    return `M 0 58 L ${attack} 6 L ${decay} ${sustain} L ${decay+40} ${sustain} L 278 58`
+  })
   const presetOptions = $derived<Option[]>(
     sound.presets.map((preset) => ({
       value: preset.id,
@@ -41,7 +48,7 @@
   }
 </script>
 
-<Panel title="Synth" modal={false} width={380} {onclose}>
+<Panel title={sound.preset.name + ' · sound'} modal={false} width={380} {onclose}>
   <Section title="Preset">
     {#snippet aside()}
       {#if sound.modified}<span class="text-xs text-accent">modified</span>{/if}
@@ -85,6 +92,9 @@
     <p class="text-xs text-muted">Sampled instruments play recordings. Pick a synth preset to shape the sound.</p>
   {:else}
     <Section title="Envelope">
+      <svg viewBox="0 0 280 64" class="h-16 w-full border-b border-line text-mint" role="img" aria-label="Envelope: attack, decay, and release timing">
+        <path d={envelope} fill="none" stroke="currentColor" stroke-width="2" />
+      </svg>
       <div class="grid grid-cols-2 gap-x-4 gap-y-3">
         <Param label="Attack" bind:value={patch.attack} min={0.001} max={2} log unit="s" />
         <Param label="Decay" bind:value={patch.decay} min={0.05} max={8} log unit="s" />

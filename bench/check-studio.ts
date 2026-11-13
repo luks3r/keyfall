@@ -18,6 +18,7 @@ function expect(label: string, ok: boolean, detail: unknown = '') {
 await withPage('/', async ({ call, ev, errors }: Page) => {
   const shot = async (name: string) => Bun.write(join(SHOTS, name), Buffer.from((await call('Page.captureScreenshot')).data, 'base64'))
   const key = async (code: string, key: string) => {
+    await ev("document.querySelector('[data-performance-surface]')?.focus({preventScroll:true})")
     await call('Input.dispatchKeyEvent', { type: 'keyDown', code, key })
     await call('Input.dispatchKeyEvent', { type: 'keyUp', code, key })
   }
@@ -84,6 +85,7 @@ await withPage('/', async ({ call, ev, errors }: Page) => {
   const started = performance.now()
   while ((await active(1)) !== 'true' && performance.now() - started < BAR_MS * 2) await Bun.sleep(50)
   expect('loop recording launches on the next bar', (await active(1)) === 'true', `${Math.round(performance.now() - started)} ms`)
+  await ev("document.querySelector('[data-performance-surface]')?.focus({preventScroll:true})")
   for (const [code, k] of [['KeyZ', 'z'], ['KeyC', 'c'], ['KeyB', 'b'], ['KeyQ', 'q']]) {
     await call('Input.dispatchKeyEvent', { type: 'keyDown', code, key: k })
     await Bun.sleep(150)

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { preserveScroll, restoreScroll } from '../ui/adaptive'
   import { MediaQuery } from 'svelte/reactivity'
   import { engine } from '../audio/engine.svelte'
   import { noteName } from '../input/keymaps'
@@ -72,7 +73,7 @@
   /** Melodic rows start at `base` at the bottom, where the clip's notes are; open there. */
   $effect(() => {
     void [clip.id, base]
-    if (!kit) queueMicrotask(() => scroller && (scroller.scrollTop = scroller.scrollHeight))
+    if (!kit) queueMicrotask(() => scroller && !restoreScroll(scroller,`steps:${clip.id}:${base}`) && (scroller.scrollTop = scroller.scrollHeight))
   })
 
   $effect(() => {
@@ -143,6 +144,11 @@
 
   function toggleStepInput() {
     studio.stepInput = stepping ? null : { clip: clip.id, cursor: 0, resolution }
+    if (studio.stepInput) {
+      const keyboard = document.querySelector<HTMLElement>('[data-performance-surface]')
+      if (keyboard?.getClientRects().length) keyboard.focus({preventScroll:true})
+      else (document.activeElement as HTMLElement)?.blur()
+    }
   }
 
   const items: ToolItem[] = $derived([
@@ -177,7 +183,7 @@
   <div class="flex border-b border-line px-2 py-1">
     <Toolbar label="Steps" {items} />
   </div>
-  <div bind:this={scroller} class="min-h-0 overflow-auto overscroll-contain" bind:clientWidth={width} role="grid" aria-label="Step grid">
+  <div bind:this={scroller} use:preserveScroll={`steps:${clip.id}:${base}`} class="min-h-0 overflow-auto overscroll-contain" bind:clientWidth={width} role="grid" aria-label="Step grid">
     <div class="relative" style:width="{LABEL + steps * stepWidth}px">
       {#each rows as { pitch, label } (pitch)}
         {@const accent = !kit && pitch % 12 === live.settings.root}

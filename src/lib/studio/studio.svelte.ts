@@ -1,3 +1,6 @@
+import { layout } from '../ui/layout.svelte'
+import { STUDIO_PANELS, type ClipEditor } from './panels'
+import { findAvailableStart, gridFor, resizeBounds, type ArrangementSnap } from './arrangement'
 import { ensureClick } from '../audio/click'
 import { engine, FIRST_TRACK_CHANNEL, LOCAL_CHANNEL, TRACK_CHANNELS } from '../audio/engine.svelte'
 import { loadSample } from '../audio/samples'
@@ -84,6 +87,10 @@ export class Studio implements TransportKeys, Capture {
   project = $state<Project>(load())
   view = $state<View>(prefs.view)
   selectedTrack = $state<string | null>(null)
+  clipEditor = $state<ClipEditor>('steps')
+  arrangementSnap = $state<ArrangementSnap>('beat')
+  insertion = $state<{trackId: string; beat: number} | null>(null)
+  notice = $state('')
   selectedClip = $state<string | null>(null)
   selectedScene = $state(0)
   playing = $state(false)
@@ -413,9 +420,40 @@ export class Studio implements TransportKeys, Capture {
       this.edit(() => (track.slots[free] = copy))
       return this.selectSlot(track.id, free)
     }
-    copy.start = clipEnd(clip)
+    copy.start = findAvailableStart(track.clips, clipEnd(clip), clip.length, gridFor(this.arrangementSnap, this.project.beatsPerBar))
+    this.notice = `Copy at bar ${(copy.start / this.project.beatsPerBar + 1).toFixed(2)}`
     this.edit(() => track.clips.push(copy))
     this.select(track.id, copy.id)
+  }
+
+  openClipEditor(trackId: string, clipId: string, editor?: ClipEditor) {
+    this.select(trackId, clipId)
+    if (editor) this.clipEditor = editor
+    layout.show(STUDIO_PANELS, this.clipEditor)
+  }
+
+  addArrangementClip(trackId: string, requested: number) {
+    const track = this.project.tracks.find(t => t.id === trackId)
+    if (!track || !Number.isFinite(requested)) return null
+    const grid = gridFor(this.arrangementSnap, this.project.beatsPerBar)
+    const start = findAvailableStart(track.clips, requested, this.project.beatsPerBar, grid)
+    this.notice = `New clip at bar ${(start / this.project.beatsPerBar + 1).toFixed(2)}`
+    return this.addClip(track, start)
+  }
+
+  setClipBounds(trackId: string, clipId: string, start: number, length: number) {
+    const clip = this.project.tracks.find(t => t.id === trackId)?.clips.find(c => c.id === clipId)
+    if (!clip || !Number.isFinite(start) || !Number.isFinite(length)) return
+    const grid = gridFor(this.arrangementSnap, this.project.beatsPerBar)
+    const next = { start: Math.max(0, Math.round(start / grid) * grid), ...resizeBounds(clip, length, grid) }
+    if (clip.start === next.start && clip.length === next.length && clip.repeat === next.repeat) return
+    this.edit(() => Object.assign(clip, next))
+  }
+
+  loopClip(trackId: string, clipId: string) {
+    const clip = this.project.tracks.find(t => t.id === trackId)?.clips.find(c => c.id === clipId)
+    if (!clip) return
+    this.edit(p => { p.loop = { start: clip.start, end: clipEnd(clip), enabled: true } })
   }
 
   select(trackId: string | null, clipId: string | null = null) {

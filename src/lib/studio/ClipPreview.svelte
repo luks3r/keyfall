@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { theme } from '../theme.svelte'
   import { snap, type Clip } from './project'
 
   let { clip, color, zoom }: { clip: Clip; color: string; zoom: number } = $props()
@@ -7,6 +8,7 @@
   const PADDING = 4
 
   $effect(() => {
+    void theme.revision
     const { notes, length, repeat, quantize } = clip
     const width = Math.max(1, Math.round(length * zoom))
     const height = canvas.clientHeight
@@ -26,7 +28,8 @@
     const span = Math.max(12, hi - lo + 1)
     const row = (height - PADDING * 2) / span
     const step = repeat > 0 ? repeat : length
-    ctx.fillStyle = color
+    const variable = /^var\((--[\w-]+)\)$/.exec(color)
+    ctx.fillStyle = variable ? getComputedStyle(canvas).getPropertyValue(variable[1]).trim() : color
     for (let offset = 0; offset < length; offset += step) {
       ctx.globalAlpha = offset ? 0.45 : 1
       for (const note of notes) {

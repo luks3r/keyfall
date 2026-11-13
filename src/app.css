@@ -93,3 +93,10 @@ button:disabled { cursor: default; }
   button[aria-label], button[role='tab'] { min-width: 44px; }
   [role='menu'] button { min-height: 44px; }
 }
+
+@theme { --color-display: #111411; --color-playhead: #f5f4dc; }
+.play-control { display: grid; gap: 4px; border-top: 2px solid var(--marker, var(--color-line)); padding-top: 6px; }
+.control-label { font: 10px ui-monospace, monospace; letter-spacing: .09em; color: var(--color-muted); }
+.clip-actions { font-family: ui-monospace, monospace; }
+[aria-label='Position'] { font: 500 22px ui-monospace, monospace; letter-spacing: -.06em; }
+[aria-label='Tempo'] { border: 1px solid var(--color-line); font-family: ui-monospace, monospace; }

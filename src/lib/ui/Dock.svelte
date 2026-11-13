@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte'
   import Button from './Button.svelte'
   import Icon from './Icon.svelte'
+  import { studio } from '../studio/studio.svelte'
   import { layout, type PanelSpec, type Zone } from './layout.svelte'
   import Menu from './Menu.svelte'
 
@@ -23,7 +24,7 @@
         role="tab"
         aria-selected={active?.id === item.id}
         class={['h-8 shrink-0 cursor-pointer rounded-lg px-3 text-sm', active?.id === item.id ? 'bg-raised text-fg' : 'text-muted hover:text-fg']}
-        onclick={() => layout.show(panels, item.id)}
+        onclick={() => { if (item.id === 'steps' || item.id === 'notes') studio.clipEditor = item.id; layout.show(panels, item.id) }}
         oncontextmenu={(e) => {
           if (layout.narrow.current) return
           e.preventDefault()

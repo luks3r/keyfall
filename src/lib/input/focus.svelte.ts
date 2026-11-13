@@ -1,3 +1,4 @@
+import { untrack } from 'svelte'
 import { scopeForTarget, type InputScope } from './focus'
 class InputFocus {
   scope = $state<InputScope>('performance')
@@ -5,12 +6,12 @@ class InputFocus {
   #blocks = 0
   block() {
     this.#blocks++
-    this.blocked = true
+    untrack(() => this.blocked = true)
     let released = false
-    return () => { if (!released) { released = true; this.#blocks--; this.blocked = this.#blocks > 0 } }
+    return () => { if (!released) { released = true; this.#blocks--; untrack(() => this.blocked = this.#blocks > 0) } }
   }
   start() {
-    const sync = () => { this.scope = scopeForTarget(document.activeElement) }
+    const sync = () => { untrack(() => this.scope = scopeForTarget(document.activeElement)) }
     addEventListener('focusin', sync)
     addEventListener('focusout', sync)
     sync()

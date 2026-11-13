@@ -82,7 +82,7 @@
     const handColor = (midi: number, hand: number) => HANDS[hand][isBlack(midi) ? 1 : 0]
 
     const bar = (midi: number, color: string, y0: number, y1: number) => {
-      const w = ws[midi] - 3
+      const w = Math.max(1, ws[midi] - 3)
       ctx.fillStyle = color
       ctx.beginPath()
       ctx.roundRect(xs[midi] + 1.5, y0, w, Math.max(y1 - y0, 3), Math.min(5, w / 3))
@@ -119,6 +119,7 @@
     }
 
     const draw = () => {
+      if (width <= 0 || height <= 0) return
       range = player.range
       const [lo, hi] = range
       const ww = layout(lo, hi)
@@ -267,7 +268,7 @@
   })
 </script>
 
-<div class="relative h-full min-h-0 w-full"><canvas data-input-scope="performance" data-performance-surface tabindex="0" role="application" aria-label="Playable keyboard · Escape exits, Tab switches clip launch" bind:this={canvas}></canvas></div>
+<div class="relative h-full min-h-0 w-full"><canvas data-input-scope="performance" data-performance-surface tabindex="0" aria-label="Playable keyboard · Escape exits, Tab switches clip launch" bind:this={canvas}></canvas></div>
 
 <style>
   canvas {

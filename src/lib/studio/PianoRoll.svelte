@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
+  import { preserveScroll, restoreScroll } from '../ui/adaptive'
   import { MediaQuery } from 'svelte/reactivity'
   import { engine } from '../audio/engine.svelte'
   import { noteName } from '../input/keymaps'
@@ -57,9 +59,9 @@
   $effect(() => {
     void clip.id
     selected = new Set()
-    const notes = clip.notes
+    const notes = untrack(() => clip.notes)
     const center = notes.length ? notes.reduce((sum, n) => sum + n.pitch, 0) / notes.length : 60
-    queueMicrotask(() => scroller && (scroller.scrollTop = (rowOf.get(Math.round(center)) ?? 127 - center) * row - scroller.clientHeight / 2))
+    queueMicrotask(() => scroller && !restoreScroll(scroller,`notes:${clip.id}`) && (scroller.scrollTop = (rowOf.get(Math.round(center)) ?? 127 - center) * row - scroller.clientHeight / 2))
   })
 
   function audition(pitch: number, velocity = 0.7) {
@@ -189,7 +191,7 @@
     <Toolbar label="Notes" {items} />
   </div>
 
-  <div bind:this={scroller} class="relative min-h-0 overflow-auto overscroll-contain" role="group" aria-label="Note grid" onpointermove={onMove} onpointerup={() => (drag = null)} onpointercancel={() => (drag = null)}>
+  <div bind:this={scroller} use:preserveScroll={`notes:${clip.id}`} class="relative min-h-0 overflow-auto overscroll-contain" role="group" aria-label="Note grid" onpointermove={onMove} onpointerup={() => (drag = null)} onpointercancel={() => (drag = null)}>
     <div class="relative flex" style:height="{rows.length * row}px" style:width="{keys + width}px">
       <div class="sticky left-0 z-10 shrink-0 bg-surface" style:width="{keys}px">
         {#each rows as { pitch, label } (pitch)}

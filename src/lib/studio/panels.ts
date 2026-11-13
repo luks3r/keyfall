@@ -11,3 +11,5 @@ export const KEYBOARD_PANEL: PanelSpec = { id: 'keyboard', title: 'Keyboard', zo
 
 /** Ids of the resizable areas, also used as open/closed flags. */
 export const AREA = { side: 'studio-side', bottom: 'studio-bottom', keys: 'studio-keys-v2', narrow: 'studio-narrow' } as const
+
+export type ClipEditor = 'steps' | 'notes'

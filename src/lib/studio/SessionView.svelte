@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { preserveScroll } from '../ui/adaptive'
   import { MediaQuery } from 'svelte/reactivity'
   import { symbol } from '../input/keymaps'
   import Icon from '../ui/Icon.svelte'
@@ -22,7 +23,7 @@
   /** Long press (or right click) opens a clip for editing instead of launching it. */
   function edit(track: Track, scene: number) {
     studio.selectSlot(track.id, scene)
-    layout.show(STUDIO_PANELS, 'steps')
+    if (studio.clip) studio.openClipEditor(track.id, studio.clip.id, 'steps')
   }
 
   function press(e: PointerEvent, track: Track, scene: number) {
@@ -56,7 +57,16 @@
   {#if label}<span class="absolute top-0.5 right-1 rounded bg-accent px-1 text-[9px] font-bold text-bg">{label}</span>{/if}
 {/snippet}
 
-<div class="relative min-h-0 overflow-auto overscroll-contain bg-bg" role="grid" aria-label="Session">
+<div class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+  <div class="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-2">
+    <span class="mr-auto text-xs text-muted">{studio.track?.name ?? 'Choose a track'} · session</span>
+    {#if studio.clip && studio.track}
+      <button type="button" class="h-8 px-3 bg-raised" aria-label="Edit selected clip" onclick={() => studio.openClipEditor(studio.track!.id, studio.clip!.id)}>Edit clip</button>
+    {:else if studio.track}
+      <button type="button" class="h-8 px-3 bg-raised" aria-label="Create session clip" onclick={() => { const clip = studio.addSlotClip(studio.track!, studio.selectedScene); studio.openClipEditor(studio.track!.id, clip.id) }}>New clip</button>
+    {/if}
+  </div>
+<div use:preserveScroll={'session'} class="relative min-h-0 overflow-auto overscroll-contain bg-bg" role="grid" aria-label="Session">
   <div
     class="grid w-fit"
     style:grid-template-columns="repeat({project.tracks.length}, {column}px) {compact.current ? 76 : 112}px"
@@ -102,6 +112,8 @@
           onpointerdown={(e) => press(e, track, s)}
           onpointerup={() => release(track, s, clip)}
           onpointerleave={() => clearTimeout(holding)}
+          onpointercancel={() => {clearTimeout(holding);held=true}}
+          onclick={e => {if(e.detail===0)release(track,s,clip)}}
           oncontextmenu={(e) => {
             e.preventDefault()
             edit(track, s)
@@ -181,4 +193,6 @@
       {controls.armed ? 'Now press a pad, key or knob on your controller' : 'Tap a clip, scene, stop button or track name (volume), then move a control'}
     </p>
   {/if}
+</div>
+
 </div>

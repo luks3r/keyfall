@@ -74,8 +74,14 @@
 {/snippet}
 
 <div class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-  <div class="flex border-b border-line bg-surface px-2 py-1">
-    <Toolbar label="Play" {items} />
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-surface px-3 py-3" aria-label="Play">
+    <div class="play-control" style:--marker="var(--color-track-1)"><span class="control-label">octave</span>{@render octave()}</div>
+    <div class="play-control" style:--marker="var(--color-track-2)"><span class="control-label">transpose</span>{@render shift()}</div>
+    <div class="play-control" style:--marker="var(--color-track-3)"><span class="control-label">key / scale</span>{@render scale()}</div>
+    <div class="play-control" style:--marker="var(--color-track-4)"><span class="control-label">harmony</span>{@render chord()}</div>
+    <div class="play-control"><span class="control-label">dynamics</span>{@render velocity()}</div>
+    <Button aria-pressed={settings.lock} disabled={settings.scale==='chromatic'} title="Snap out-of-scale notes down" onclick={()=>settings.lock=!settings.lock}>Scale lock</Button>
+    <Button aria-pressed={player.sustain} onclick={()=>player.setSustain(!player.sustain)}>Sustain</Button>
   </div>
   <Roll {player} />
 </div>

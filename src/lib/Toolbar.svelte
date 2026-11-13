@@ -60,7 +60,7 @@
 </script>
 
 {#snippet workspace()}
-  <span class="mr-1 size-3.5 shrink-0 rounded bg-gradient-to-br from-accent to-mint max-sm:hidden"></span>
+  <span class="mr-1 size-3.5 shrink-0 rounded-sm border border-fg bg-transparent max-sm:hidden"></span>
   <WorkspaceSwitch />
 {/snippet}
 

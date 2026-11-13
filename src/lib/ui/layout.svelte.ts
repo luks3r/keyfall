@@ -1,3 +1,4 @@
+import { sanitizeLayout } from './adaptive'
 import { MediaQuery } from 'svelte/reactivity'
 
 export type Zone = 'side' | 'bottom'
@@ -14,7 +15,7 @@ const STORAGE_KEY = 'keyfall.layout.v1'
 function load(): Stored {
   const defaults: Stored = { sizes: {}, zones: {}, active: {}, open: {} }
   try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }
+    return sanitizeLayout(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'))
   } catch {
     return defaults
   }
@@ -29,6 +30,9 @@ export type PanelSpec = { id: string; title: string; zone: Zone }
  */
 class Layout {
   #stored = $state(load())
+  surface = $state<'project'|'editor'|'performance'>('project')
+  inspectorOpen = $state(false)
+  readonly focused = new MediaQuery('(max-width: 1099px), (max-height: 759px)')
   readonly narrow = new MediaQuery('(max-width: 767px)')
 
   constructor() {
@@ -77,6 +81,11 @@ class Layout {
   }
 
   show(panels: PanelSpec[], id: string) {
+    if (this.focused.current) {
+      if (id === 'track') this.inspectorOpen = true
+      else if (id === 'steps' || id === 'notes') this.surface = 'editor'
+      else if (id === 'keyboard' || id === 'pads') this.surface = 'performance'
+    }
     const panel = panels.find((p) => p.id === id)
     if (!panel) return
     const zone = this.zoneOf(panel)

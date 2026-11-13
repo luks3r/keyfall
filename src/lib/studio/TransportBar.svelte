@@ -52,7 +52,7 @@
     { id: 'play', label: 'Play', priority: Infinity, content: play },
     { id: 'record', label: 'Record', priority: Infinity, content: record },
     { id: 'position', label: 'Position', priority: Infinity, content: position },
-    { id: 'tempo', label: 'Tempo', priority: 8, content: tempo, menu: tempoMenu },
+    { id: 'tempo', label: 'Tempo', priority: Infinity, content: tempo, menu: tempoMenu },
     { id: 'quantize', label: 'Launch quantization', priority: 5, content: quantize, menu: quantize },
     { id: 'loop-bars', label: 'New loop length', priority: 2, content: loopBars, menu: loopBars },
     { id: 'metronome', label: 'Metronome', icon: 'metronome', priority: 6, active: studio.metronome, onclick: () => (studio.metronome = !studio.metronome) },
@@ -95,7 +95,7 @@
 {/snippet}
 
 {#snippet workspace()}
-  <span class="mr-1 size-3.5 shrink-0 rounded-sm border border-fg bg-transparent max-sm:hidden"></span>
+  <span class="mr-3 hidden shrink-0 font-mono text-xs tracking-widest lg:inline">keyfall<span class="ml-1 text-mint"> / </span></span>
   <WorkspaceSwitch />
 {/snippet}
 
@@ -118,7 +118,7 @@
     aria-label={studio.recording ? 'Stop recording' : 'Record'}
     aria-pressed={!!studio.recording}
   >
-    <Icon name="record" filled class={['text-danger', studio.recording && 'animate-pulse']} />
+    <Icon name="record" filled class="text-danger" />
   </Button>
 {/snippet}
 
