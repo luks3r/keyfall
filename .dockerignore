@@ -1,0 +1,15 @@
+# Only sources the image build reads; everything else stays out of the context.
+**/node_modules
+**/target
+**/dist
+**/.DS_Store
+**/*.log
+.vscode
+bench
+docs
+tests
+src-tauri/gen
+src-tauri/icons
+src/lib/audio/dsp.wasm
+Dockerfile
+.dockerignore

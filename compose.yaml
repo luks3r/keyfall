@@ -1,0 +1,14 @@
+# The web app and a room server as separate containers, here on one machine. To spread out, run `rooms` on as
+# many machines as you like (each with --app pointing at the app) and list them all in KEYFALL_SERVERS.
+# Behind HTTPS, list servers as wss://host so the browser may connect.
+services:
+  app:
+    build: { context: ., target: app }
+    ports: ["8080:8080"]
+    environment:
+      KEYFALL_SERVERS: localhost:7777
+
+  rooms:
+    build: { context: ., target: room }
+    ports: ["7777:7777"]
+    command: ["--app", "http://localhost:8080", "--name", "Rooms one"]
