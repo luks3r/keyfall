@@ -6,9 +6,9 @@
   let { onclose }: { onclose: () => void } = $props()
 
   const MOUSE = [
-    ['Knob', 'drag up/down to turn, Shift-drag for fine, scroll for steps'],
-    ['Knob', 'double-click, Alt-click or Delete resets; Enter, typing or a click on its value types one'],
-    ['Knob', 'right-click to reset, type a value or learn a MIDI knob'],
+    ['Value', 'drag a knob or any value right or up to turn it; Shift-drag for fine, scroll for steps'],
+    ['Value', 'tap or right-click to open it: a list of choices, or a slider, − / + and a field to type in'],
+    ['Value', 'double-click, Alt-click or Delete resets; Enter or typing a number opens it to type'],
     ['Step grid', 'click a step to add it, drag to lengthen (drums: paint); click it again to remove'],
     ['Step grid', 'drag a step up/down for velocity; right-click or right-drag erases'],
     ['Notes', 'click to add, drag to move, drag the right edge to resize, Alt-drag copies'],

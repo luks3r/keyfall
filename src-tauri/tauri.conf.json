@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://tonejs.github.io"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://tonejs.github.io https://nbrosowsky.github.io"
     }
   },
   "bundle": {

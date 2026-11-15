@@ -3,10 +3,11 @@
   import { shortcuts } from '../../device/shortcuts.svelte'
   import SoftKeys, { type SoftKey } from '../../device/SoftKeys.svelte'
   import { noteName } from '../../input/keymaps'
+  import { hold } from '../../ui/hold'
   import Menu from '../../ui/Menu.svelte'
-  import { MAX_BARS, patternView, RESOLUTION_NAMES, RESOLUTIONS } from '../pattern.svelte'
+  import { MAX_BARS, MAX_STEPS, patternView, SPEED_NAMES, SPEEDS } from '../pattern.svelte'
   import PianoRoll, { ZOOMS } from '../PianoRoll.svelte'
-  import { QUANTIZE_GRIDS, type Clip, type Track } from '../project'
+  import { DEFAULT_STEP, QUANTIZE_GRIDS, stepOf, type Clip, type Track } from '../project'
   import StepSequencer from '../StepSequencer.svelte'
   import { isKit, studio, trackChannel } from '../studio.svelte'
 
@@ -29,7 +30,6 @@
   const DEFAULT_OCTAVE = 48
   const DEFAULT_SNAP = 0.25
   const DEFAULT_ZOOM = 3
-  const DEFAULT_STEP = 1 / 4
 
   let grid = $state(DEFAULT_SNAP)
   let zoomIndex = $state(DEFAULT_ZOOM)
@@ -60,8 +60,8 @@
     const length = rangeKnob('Length', 1, MAX_BARS, () => current.length / bar, (v) => patternView.setBars(current, v), (v) => `${Math.round(v)} bar${Math.round(v) === 1 ? '' : 's'}`, { initial: studio.project.loopBars, step: 1 })
     if (page === 0) {
       return [
-        choiceKnob('Step size', RESOLUTIONS, () => patternView.resolution as (typeof RESOLUTIONS)[number], (v) => (patternView.resolution = v), (v) => RESOLUTION_NAMES.get(v) ?? '', DEFAULT_STEP),
-        length,
+        choiceKnob('Speed', SPEEDS, () => stepOf(current) as (typeof SPEEDS)[number], (v) => patternView.setSpeed(current, v), (v) => SPEED_NAMES.get(v) ?? '', DEFAULT_STEP),
+        rangeKnob('Steps', 1, MAX_STEPS, () => Math.round(current.length / stepOf(current)), (v) => patternView.setSteps(current, v), (v) => `${Math.round(v)} steps`, { initial: (studio.project.loopBars * bar) / stepOf(current), step: 1 }),
         isKit(track) ? null : choiceKnob('Octave', OCTAVES, () => OCTAVES.reduce((a, b) => (Math.abs(b - patternView.base) < Math.abs(a - patternView.base) ? b : a)), (v) => (patternView.base = v), (v) => noteName(v), DEFAULT_OCTAVE),
         percentKnob('Velocity', () => patternView.velocity, (v) => (patternView.velocity = v), 1, 0.1),
       ]
@@ -85,7 +85,7 @@
 
   const selection = $derived(clip ? patternView.selection(clip) : [])
   /** Step for copy, move and duplicate: the step size on the step grid, the snap on the note grid. */
-  const step = () => (page === 0 ? patternView.resolution : grid)
+  const step = () => (page === 0 && clip ? stepOf(clip) : grid)
   const editing = () => !!document.activeElement?.closest('[data-pattern-editor]')
 
   $effect(() => {
@@ -173,8 +173,8 @@
         class={['relative h-9 min-w-10 flex-1 cursor-pointer rounded-md font-mono text-xs', selected ? 'bg-fg text-bg' : slot ? 'bg-raised' : 'border border-dashed border-line text-muted']}
         onclick={() => pick(i)}
         ondblclick={() => !slot && studio.addSlotClip(track, i)}
-        oncontextmenu={(e) => (e.preventDefault(), studio.selectSlot(track.id, i), (menu = { scene: i, x: e.clientX, y: e.clientY }))}
-        title={slot ? `Pattern ${i + 1} · right-click for more` : selected ? 'Click again to start a pattern' : `Pattern ${i + 1} (empty) · double-click to start`}
+        use:hold={(point) => (studio.selectSlot(track.id, i), (menu = { scene: i, ...point }))}
+        title={slot ? `Pattern ${i + 1} · right-click or hold for more` : selected ? 'Click again to start a pattern' : `Pattern ${i + 1} (empty) · double-click to start`}
       >
         {i + 1}
         {#if slot}<span class="absolute top-1 right-1 size-1.5 rounded-full" style:background={live ? 'var(--color-danger)' : color}></span>{/if}

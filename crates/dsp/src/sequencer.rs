@@ -240,12 +240,13 @@ impl Sequencer {
     }
 
     /// Launches `clip` (or stops with `None`) on the next quantum, or now when `quantized` is false.
-    /// Launching while stopped starts the transport.
+    /// Launching while stopped starts the transport from the start of the current bar, and the clip with it.
     pub fn launch(&mut self, lane: usize, clip: Option<(ClipId, Arc<Pattern>)>, quantized: bool) {
-        if !self.playing && clip.is_some() {
-            self.play(self.song);
+        let starting = !self.playing && clip.is_some();
+        if starting {
+            self.play((self.song / self.beats_per_bar).floor() * self.beats_per_bar);
         }
-        let at = if quantized && self.quantum > 0. { (self.clock / self.quantum).ceil() * self.quantum } else { self.clock };
+        let at = if quantized && self.quantum > 0. && !starting { (self.clock / self.quantum).ceil() * self.quantum } else { self.clock };
         let Some(lane) = self.lanes.get_mut(lane) else { return };
         let pending = match clip {
             Some((id, pattern)) => Pending::Launch(id, pattern),
@@ -425,6 +426,18 @@ mod tests {
         assert_eq!(on, [(4., 48)]);
         seq.write_status(&mut status);
         assert_eq!(&status[STATUS_HEADER + STATUS_PER_LANE..][..3], &[7., 4., 0.]);
+    }
+
+    #[test]
+    fn launching_while_stopped_starts_now_from_the_bar() {
+        let mut seq = Sequencer::new(1, 32, 63);
+        seq.set_quantum(4.);
+        seq.play(0.);
+        run(&mut seq, 5.5);
+        seq.stop(&mut |_| {});
+        seq.launch(0, Some((1, pattern(1., &[(0., 0.5, 60)]))), true);
+        assert_eq!(seq.song, 4., "back to the start of the bar it stopped in");
+        assert_eq!(run(&mut seq, 1.), [(4., 60)], "no wait for the next bar");
     }
 
     #[test]

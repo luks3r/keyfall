@@ -1,6 +1,7 @@
 export type Hand = 0 | 1
 export type Note = { midi: number; time: number; duration: number; velocity: number; hand: Hand; part: number }
-export type Song = { name: string; parts: string[]; notes: Note[]; duration: number; longest: number }
+/** `tempo` (bpm) and `beatsPerBar` come from a MIDI file's header, so Studio can lay its notes on the right bars. */
+export type Song = { name: string; parts: string[]; notes: Note[]; duration: number; longest: number; tempo?: number; beatsPerBar?: number }
 
 const LEFT: Hand = 0
 const RIGHT: Hand = 1
@@ -40,24 +41,34 @@ export async function parseMidiBytes(bytes: ArrayBuffer, name: string): Promise<
   const midi = new Midi(bytes)
   const tracks = midi.tracks.filter((track) => track.notes.length && !track.instrument.percussion)
   if (!tracks.length) throw new Error('No playable notes')
+  const meter = { tempo: midi.header.tempos[0]?.bpm, beatsPerBar: beatsPerBar(midi.header.timeSignatures[0]?.timeSignature) }
   if (tracks.length === 1) {
     const notes = tracks[0].notes.map(({ midi, time, duration, velocity }) => {
       const hand = handFor(midi)
       return { midi, time, duration, velocity, hand, part: handPart(hand) }
     })
-    return createSong(name, HAND_PARTS, notes)
+    return { ...createSong(name, HAND_PARTS, notes), ...meter }
   }
   const parts = tracks.map((track, i) => track.name.trim() || `Part ${i + 1}`)
   const notes = tracks.flatMap((track, part) =>
     track.notes.map(({ midi, time, duration, velocity }) => ({ midi, time, duration, velocity, hand: part === 0 ? RIGHT : LEFT, part })),
   )
-  return createSong(name, parts, notes)
+  return { ...createSong(name, parts, notes), ...meter }
+}
+
+/** Quarter-note beats in a bar of `numerator/denominator` time: 3/4 → 3, 6/8 → 3, 12/8 → 6. */
+export function beatsPerBar(signature: number[] | undefined) {
+  const [numerator, denominator] = signature ?? []
+  if (!numerator || !denominator) return undefined
+  return Math.max(1, Math.round((numerator * 4) / denominator))
 }
 
 export async function toMidi(song: Song): Promise<Uint8Array<ArrayBuffer>> {
   const { Midi } = await import('@tonejs/midi')
   const midi = new Midi()
   midi.name = song.name
+  if (song.tempo) midi.header.setTempo(song.tempo)
+  if (song.beatsPerBar) midi.header.timeSignatures.push({ ticks: 0, timeSignature: [song.beatsPerBar, 4] })
   const tracks = song.parts.map((name) => Object.assign(midi.addTrack(), { name }))
   for (const { midi: pitch, time, duration, velocity, part } of song.notes) {
     tracks[part].addNote({ midi: pitch, time, duration, velocity })

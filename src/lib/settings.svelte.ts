@@ -19,6 +19,8 @@ type Stored = {
   custom: KeyLayout
   transpose: number
   range: string
+  /** Rows of keys in Piano's Play on a phone held upright: one, or two stacked for more range. */
+  keyRows: 1 | 2
   lookahead: number
   labels: boolean
   volume: number
@@ -37,6 +39,7 @@ const DEFAULTS: Stored = {
   custom: { ...KEYMAPS[0].keys },
   transpose: 0,
   range: RANGE_AUTO,
+  keyRows: 1,
   lookahead: 3,
   labels: true,
   volume: 0.8,
@@ -73,6 +76,7 @@ class Settings {
   custom = $state(stored.custom)
   transpose = $state(stored.transpose)
   range = $state(stored.range)
+  keyRows = $state<1 | 2>(stored.keyRows === 2 ? 2 : 1)
   lookahead = $state(stored.lookahead)
   labels = $state(stored.labels)
   volume = $state(stored.volume)
@@ -102,6 +106,7 @@ class Settings {
           custom: $state.snapshot(this.custom),
           transpose: this.transpose,
           range: this.range,
+          keyRows: this.keyRows,
           lookahead: this.lookahead,
           labels: this.labels,
           volume: this.volume,

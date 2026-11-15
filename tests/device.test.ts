@@ -37,6 +37,23 @@ describe('knob specs', () => {
     expect(knob.initial).toBe(0)
   })
 
+  test('log knobs spread times evenly by ratio', () => {
+    let attack = 0.01
+    const knob = rangeKnob('Attack', 0.001, 1, () => attack, (v) => (attack = v), String, { log: true })
+    expect(knob.value()).toBeCloseTo(1 / 3)
+    knob.set(2 / 3)
+    expect(attack).toBeCloseTo(0.1)
+  })
+
+  test('choice knobs list their choices with groups', () => {
+    const knob = choiceKnob('Sound', ['a', 'b', 'c'], () => 'b', () => {}, (v) => v.toUpperCase(), 'a', (v) => (v === 'c' ? 'Mine' : 'Built in'))
+    expect(knob.options).toEqual([
+      { label: 'A', value: 0, group: 'Built in' },
+      { label: 'B', value: 0.5, group: 'Built in' },
+      { label: 'C', value: 1, group: 'Mine' },
+    ])
+  })
+
   test('numbers read with signs, decimals and k', () => {
     expect(parseNumber('-3 st')).toBe(-3)
     expect(parseNumber('.5')).toBe(0.5)

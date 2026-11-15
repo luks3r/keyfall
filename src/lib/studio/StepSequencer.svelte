@@ -7,7 +7,7 @@
   import { noteName } from '../input/keymaps'
   import { live, SCALES } from './live.svelte'
   import { notesIn, patternView } from './pattern.svelte'
-  import type { Clip, ClipNote, Track } from './project'
+  import { stepOf, type Clip, type ClipNote, type Track } from './project'
   import { isKit, studio, trackChannel } from './studio.svelte'
 
   /**
@@ -21,7 +21,10 @@
   let { track, clip, color }: { track: Track; clip: Clip; color: string } = $props()
 
   const coarse = new MediaQuery('(pointer: coarse)')
-  const LABEL = 76
+  /** Touch: a still finger this long starts editing (paint, velocity, length); moving sooner scrolls instead. */
+  const HOLD_MS = 350
+  /** Narrowest step a fingertip can hit. */
+  const TOUCH_STEP = 40
   const AUDITION_MS = 180
   const EPSILON = 1e-6
   const DRAG_SLOP = 4
@@ -38,12 +41,34 @@
   let cursor = $state({ step: 0, row: 0 })
   let hint = $state<{ step: number; row: number; text: string } | null>(null)
   let box = $state<{ from: { step: number; row: number }; to: { step: number; row: number } } | null>(null)
-  const resolution = $derived(patternView.resolution)
+  const resolution = $derived(stepOf(clip))
 
   const kit = $derived(isKit(track))
   const steps = $derived(Math.max(1, Math.round(clip.length / resolution)))
-  const stepsPerBeat = $derived(Math.round(1 / resolution))
-  const stepWidth = $derived(Math.max(coarse.current ? 44 : 22, Math.min(48, (width - LABEL) / steps)))
+  /** Steps are drawn in groups of 4 (3 for triplets) and rows of four groups, at any speed, like a drum machine. */
+  const group = $derived(Math.round(1 / resolution) % 3 === 0 ? 3 : 4)
+  /** Row names: narrower on phones, where every step counts. */
+  const LABEL = $derived(coarse.current && width < 600 ? 52 : 76)
+  /** Touch: whole groups of fingertip-wide steps per screen ("page"); the grid scrolls a page at a time. */
+  const perPage = $derived(coarse.current ? Math.max(group, Math.floor((width - LABEL) / TOUCH_STEP / group) * group) : steps)
+  const paged = $derived(coarse.current && steps > perPage)
+  const stepWidth = $derived(paged ? (width - LABEL) / perPage : Math.max(coarse.current ? TOUCH_STEP : 22, Math.min(48, (width - LABEL) / steps)))
+  const pages = $derived(paged ? Math.ceil(steps / perPage) : 1)
+  let scrollLeft = $state(0)
+  const page = $derived(Math.round(scrollLeft / (perPage * stepWidth)))
+  /** The last time a finger scrolled the grid; the playhead leaves the view alone for a moment after. */
+  let touched = 0
+
+  function showPage(index: number, smooth = true) {
+    scroller?.scrollTo({ left: index * perPage * stepWidth, behavior: smooth ? 'smooth' : 'instant' })
+  }
+
+  /** Touch, playing: turn the page with the playhead, unless a finger just moved the grid. */
+  $effect(() => {
+    if (!paged || playStep < 0 || performance.now() - touched < 2000) return
+    const target = Math.floor(playStep / perPage)
+    if (target !== untrack(() => page)) showPage(target)
+  })
   const rowHeight = $derived(coarse.current ? 44 : 26)
   /**
    * Kit tracks: one row per pad, kick first as on drum machines. Melodic tracks: two octaves of the live scale from
@@ -149,11 +174,76 @@
     return clip.notes.filter((n) => pitches.has(n.pitch) && n.start < (right + 1) * resolution - EPSILON && n.start + n.length > left * resolution + EPSILON)
   }
 
-  function onPointerDown(e: PointerEvent) {
-    if ((e.target as HTMLElement).closest('button')) return
+  /**
+   * A finger on the grid: a tap toggles the step, a quick swipe scrolls the grid, and a finger held still first
+   * edits like a mouse drag (paint steps, drag velocity or length).
+   */
+  function onTouch(e: PointerEvent) {
     const start = cellAt(e)
     if (!inside(start)) return
     e.preventDefault()
+    surface.setPointerCapture(e.pointerId)
+    const origin = { left: scroller.scrollLeft, top: scroller.scrollTop }
+    let mode: 'wait' | 'pan' | 'edit' = 'wait'
+    const timer = setTimeout(() => {
+      if (mode !== 'wait') return
+      mode = 'edit'
+      navigator.vibrate?.(8)
+      stop()
+      edit(e, start)
+    }, HOLD_MS)
+    const move = (event: PointerEvent) => {
+      const dx = event.clientX - e.clientX
+      const dy = event.clientY - e.clientY
+      if (mode === 'wait' && Math.hypot(dx, dy) > DRAG_SLOP * 2) mode = 'pan'
+      if (mode !== 'pan') return
+      touched = performance.now()
+      scroller.scrollLeft = origin.left - dx
+      scroller.scrollTop = origin.top - dy
+    }
+    const stop = () => {
+      surface.removeEventListener('pointermove', move)
+      surface.removeEventListener('pointerup', up)
+      surface.removeEventListener('pointercancel', cancel)
+    }
+    const up = () => {
+      clearTimeout(timer)
+      stop()
+      if (mode !== 'wait') return
+      // A tap: toggle the step.
+      surface.focus({ preventScroll: true })
+      focused = false
+      cursor = start
+      patternView.insert = start.step * resolution
+      const pitch = rows[start.row].pitch
+      const there = notesAt(pitch, start.step)
+      studio.commit()
+      if (there.length) removeAll(there)
+      else {
+        patternView.select([])
+        audition(pitch, add(pitch, start.step).velocity)
+      }
+    }
+    const cancel = () => {
+      clearTimeout(timer)
+      stop()
+    }
+    surface.addEventListener('pointermove', move)
+    surface.addEventListener('pointerup', up)
+    surface.addEventListener('pointercancel', cancel)
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    if ((e.target as HTMLElement).closest('button')) return
+    if (e.pointerType === 'touch' && !e.shiftKey) return onTouch(e)
+    const start = cellAt(e)
+    if (!inside(start)) return
+    e.preventDefault()
+    edit(e, start)
+  }
+
+  /** Mouse (or a held finger): add, remove, paint, select, erase, velocity and length, as described at the top. */
+  function edit(e: PointerEvent, start: { step: number; row: number }) {
     surface.focus({ preventScroll: true })
     focused = false
     cursor = start
@@ -295,8 +385,8 @@
   }
 </script>
 
-<div class="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)]">
-  <div bind:this={scroller} use:preserveScroll={`steps:${clip.id}:${patternView.base}`} class="min-h-0 overflow-auto overscroll-contain" bind:clientWidth={width}>
+<div class="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto]">
+  <div bind:this={scroller} use:preserveScroll={`steps:${clip.id}:${patternView.base}`} class="min-h-0 overflow-auto overscroll-contain" bind:clientWidth={width} onscroll={() => (scrollLeft = scroller.scrollLeft)}>
     <div
       bind:this={surface}
       class="relative touch-none outline-none select-none"
@@ -325,7 +415,7 @@
           <div
             class="relative cursor-pointer"
             style:width="{steps * stepWidth}px"
-            style:background-image="repeating-linear-gradient(90deg, var(--color-grid-strong) 0 1px, transparent 1px {stepWidth * stepsPerBeat * studio.project.beatsPerBar}px), repeating-linear-gradient(90deg, var(--color-grid) 0 1px, transparent 1px {stepWidth * stepsPerBeat}px), repeating-linear-gradient(90deg, var(--color-grid-faint) 0 1px, transparent 1px {stepWidth}px)"
+            style:background-image="repeating-linear-gradient(90deg, var(--color-grid-strong) 0 1px, transparent 1px {stepWidth * group * 4}px), repeating-linear-gradient(90deg, var(--color-grid) 0 1px, transparent 1px {stepWidth * group}px), repeating-linear-gradient(90deg, var(--color-grid-faint) 0 1px, transparent 1px {stepWidth}px)"
           >
             {#each clip.notes as note, i (i)}
               {#if note.pitch === pitch}
@@ -367,4 +457,20 @@
       {/if}
     </div>
   </div>
+  {#if pages > 1}
+    <!-- Touch: which part of the pattern shows; follows the playhead while it plays. -->
+    <div class="flex gap-1 border-t border-line px-2 py-1" role="group" aria-label="Step pages">
+      {#each { length: pages } as _, i (i)}
+        {@const current = i === page}
+        <button
+          type="button"
+          data-ui
+          class={['label h-control-sm min-w-0 flex-1 cursor-pointer rounded-control', current ? 'bg-fg text-bg' : 'bg-raised text-fg', playStep >= 0 && Math.floor(playStep / perPage) === i && !current && 'ring-1 ring-fg/60']}
+          aria-pressed={current}
+          aria-label="Steps {i * perPage + 1} to {Math.min(steps, (i + 1) * perPage)}"
+          onclick={() => ((touched = performance.now()), showPage(i))}>{i * perPage + 1}–{Math.min(steps, (i + 1) * perPage)}</button
+        >
+      {/each}
+    </div>
+  {/if}
 </div>

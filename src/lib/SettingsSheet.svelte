@@ -14,6 +14,7 @@
   import Panel from './ui/Panel.svelte'
   import Param from './ui/Param.svelte'
   import Section from './ui/Section.svelte'
+  import Segmented from './ui/Segmented.svelte'
   import Select, { type Option } from './ui/Select.svelte'
   import Toggle from './ui/Toggle.svelte'
 
@@ -91,7 +92,7 @@
     <Field label="Instrument" hint={SOUND_HINT[engine.status]} tone={engine.status === 'error' ? 'danger' : 'accent'}>
       <Select bind:value={() => sound.presetId, (id) => sound.select(id)} options={soundOptions} />
     </Field>
-    <Button onclick={onsynth}><Icon name="wave" />Edit synth</Button>
+    <Button onclick={onsynth}><Icon name="wave" />Edit sound</Button>
     <Param label="Volume" bind:value={settings.volume} min={0} max={1} />
   </Section>
 
@@ -121,6 +122,11 @@
     <Field label="Visible keys">
       <Select bind:value={settings.range} options={rangeOptions} />
     </Field>
+    <!-- Not a Field: a label around buttons would press the first one when its text is clicked. -->
+    <div class="grid gap-1.5">
+      <span class="flex justify-between gap-3 text-xs text-muted">Rows of keys on a phone<span>Play, held upright</span></span>
+      <Segmented label="Rows of keys on a phone" options={[{ value: 1, label: 'One row' }, { value: 2, label: 'Two rows' }]} bind:value={settings.keyRows} />
+    </div>
     <Param label="Fall time" bind:value={settings.lookahead} min={1} max={8} step={0.5} unit="s" />
     <Toggle label="Key labels" bind:checked={settings.labels} />
   </Section>

@@ -1,35 +1,27 @@
 <script lang="ts">
-  import { MAX_PARTIALS, WAVES } from './audio/patch'
-  import { sound } from './audio/sound.svelte'
+  import { patchControls, type SoundSection } from './audio/patch-controls'
+  import { presetGroup, sound } from './audio/sound.svelte'
+  import Control from './device/Control.svelte'
+  import { choiceKnob } from './device/knobs.svelte'
+  import SoundEditor from './SoundEditor.svelte'
   import Button from './ui/Button.svelte'
-  import Icon from './ui/Icon.svelte'
+  import { focusOnMount } from './ui/focus'
   import Panel from './ui/Panel.svelte'
-  import Param from './ui/Param.svelte'
-  import Section from './ui/Section.svelte'
-  import Select, { type Option } from './ui/Select.svelte'
-  import Toggle from './ui/Toggle.svelte'
 
-  let { onclose }: { onclose: () => void } = $props()
+  /**
+   * The piano's sound, beside the keys: pick an instrument, shape it while you play, keep it as your own. A panel,
+   * or `docked` in the desktop inspector.
+   */
+  let { onclose, docked = false }: { onclose?: () => void; docked?: boolean } = $props()
 
   let naming = $state<'new' | 'rename' | null>(null)
   let name = $state('')
+  let section = $state<SoundSection>('voice')
+  let osc = $state(0)
 
-  const patch = $derived(sound.patch)
-  const envelope = $derived.by(() => {
-    const scale = 238 / (patch.attack + patch.decay + patch.release)
-    const attack = patch.attack * scale
-    const decay = attack + patch.decay * scale
-    const sustain = 58 - patch.sustain * 52
-    return `M 0 58 L ${attack} 6 L ${decay} ${sustain} L ${decay+40} ${sustain} L 278 58`
-  })
-  const presetOptions = $derived<Option[]>(
-    sound.presets.map((preset) => ({
-      value: preset.id,
-      label: preset.name,
-      group: preset.id.startsWith('custom-') ? 'My presets' : preset.kind === 'synth' ? 'Synth' : 'Sampled',
-    })),
-  )
-  const waveOptions: Option[] = WAVES.map((wave) => ({ value: wave, label: wave }))
+  const synth = $derived(sound.preset.kind === 'synth' ? sound.preset.patch : null)
+  const instrument = $derived(choiceKnob('Instrument', sound.presets.map((p) => p.id), () => sound.presetId, (id) => sound.select(id), (id) => sound.find(id).name, undefined, (id) => presetGroup(sound.find(id))))
+  const controls = $derived(patchControls(sound.patch, synth, (change) => change(sound.patch)))
 
   function startNaming(kind: 'new' | 'rename') {
     naming = kind
@@ -41,110 +33,60 @@
     else if (naming === 'rename') sound.rename(name)
     naming = null
   }
-
-  function addPartial() {
-    const last = patch.partials.at(-1)
-    patch.partials.push({ ratio: (last?.ratio ?? 0) + 1, wave: 'sine', gain: 0.2, detune: 0 })
-  }
 </script>
 
-<Panel title={sound.preset.name + ' · sound'} modal={false} width={380} {onclose}>
-  <Section title="Preset">
-    {#snippet aside()}
-      {#if sound.modified}<span class="text-xs text-accent">modified</span>{/if}
-    {/snippet}
-    <Select bind:value={() => sound.presetId, (id) => sound.select(id)} options={presetOptions} />
-
-    {#if naming}
-      <form
-        class="flex gap-2"
-        onsubmit={(e) => {
-          e.preventDefault()
-          commitName()
-        }}
-      >
-        <!-- svelte-ignore a11y_autofocus -->
-        <input
-          bind:value={name}
-          autofocus
-          aria-label="Preset name"
-          class="h-8 min-w-0 flex-1 rounded-lg bg-raised px-2.5 outline-none focus:ring-1 focus:ring-accent"
-          onkeydown={(e) => e.code === 'Escape' && (e.stopPropagation(), (naming = null))}
-        />
-        <Button type="submit" variant="accent">{naming === 'new' ? 'Create' : 'Rename'}</Button>
-      </form>
-    {:else if sound.preset.kind === 'synth'}
-      <div class="flex flex-wrap gap-2">
-        {#if sound.isCustom}
-          <Button onclick={() => sound.save()} disabled={!sound.modified}>Save</Button>
-        {/if}
-        <Button onclick={() => startNaming('new')}>Save as…</Button>
-        <Button onclick={() => sound.reset()} disabled={!sound.modified}>Revert</Button>
-        {#if sound.isCustom}
-          <Button onclick={() => startNaming('rename')}>Rename</Button>
-          <Button variant="danger" onclick={() => sound.remove()}>Delete</Button>
-        {/if}
-      </div>
-    {/if}
-  </Section>
-
-  {#if sound.preset.kind === 'sampled'}
-    <p class="text-xs text-muted">Sampled instruments play recordings. Pick a synth preset to shape the sound.</p>
-  {:else}
-    <Section title="Envelope">
-      <svg viewBox="0 0 280 64" class="h-16 w-full border-b border-line text-mint" role="img" aria-label="Envelope: attack, decay, and release timing">
-        <path d={envelope} fill="none" stroke="currentColor" stroke-width="2" />
-      </svg>
-      <div class="grid grid-cols-2 gap-x-4 gap-y-3">
-        <Param label="Attack" bind:value={patch.attack} min={0.001} max={2} log unit="s" />
-        <Param label="Decay" bind:value={patch.decay} min={0.05} max={8} log unit="s" />
-        <Param label="Sustain" bind:value={patch.sustain} min={0} max={1} />
-        <Param label="Release" bind:value={patch.release} min={0.01} max={4} log unit="s" />
-        <Param label="Level" bind:value={patch.gain} min={0} max={1.5} />
-        <div class="self-end pb-1"><Toggle label="Key tracking" bind:checked={patch.keyTrack} /></div>
-      </div>
-    </Section>
-
-    <Section title="Filter">
-      {#snippet aside()}<Toggle label="" bind:checked={patch.filter.enabled} />{/snippet}
-      <div class="grid grid-cols-2 gap-x-4 gap-y-3">
-        <Param label="Cutoff" bind:value={patch.filter.base} min={20} max={8000} log unit=" Hz" disabled={!patch.filter.enabled} />
-        <Param label="Key follow" bind:value={patch.filter.track} min={0} max={8} disabled={!patch.filter.enabled} />
-        <Param label="Envelope" bind:value={patch.filter.env} min={0} max={8} disabled={!patch.filter.enabled} />
-        <Param label="Env decay" bind:value={patch.filter.decay} min={0.05} max={8} log unit="s" disabled={!patch.filter.enabled} />
-      </div>
-    </Section>
-
-    <Section title="FM">
-      {#snippet aside()}<Toggle label="" bind:checked={patch.fm.enabled} />{/snippet}
-      <div class="grid grid-cols-2 gap-x-4 gap-y-3">
-        <Param label="Ratio" bind:value={patch.fm.ratio} min={0.25} max={16} step={0.25} disabled={!patch.fm.enabled} />
-        <Param label="Depth" bind:value={patch.fm.index} min={0} max={10} step={0.05} disabled={!patch.fm.enabled} />
-        <Param label="Decay" bind:value={patch.fm.decay} min={0.02} max={4} log unit="s" disabled={!patch.fm.enabled} />
-      </div>
-    </Section>
-
-    <Section title="Oscillators">
-      {#snippet aside()}
-        <Button variant="ghost" shape="square" onclick={addPartial} disabled={patch.partials.length >= MAX_PARTIALS} aria-label="Add oscillator" title="Add oscillator">
-          <Icon name="plus" />
-        </Button>
-      {/snippet}
-      {#each patch.partials as partial, i (i)}
-        <div class="grid gap-2 rounded-xl bg-bg/60 p-3">
-          <div class="flex items-center gap-2">
-            <div class="flex-1"><Select bind:value={partial.wave} options={waveOptions} /></div>
-            <Button variant="ghost" shape="square" onclick={() => patch.partials.splice(i, 1)} disabled={patch.partials.length <= 1} aria-label="Remove oscillator">
-              <Icon name="minus" />
-            </Button>
-          </div>
-          <div class="grid grid-cols-2 gap-x-4 gap-y-3">
-            <Param label="Ratio" bind:value={partial.ratio} min={0.25} max={16} step={0.25} />
-            <Param label="Level" bind:value={partial.gain} min={0} max={1} />
-            <Param label="Detune" bind:value={partial.detune} min={-50} max={50} step={1} unit="¢" />
-          </div>
-        </div>
-      {/each}
-    </Section>
+{#snippet voice()}
+  <Control spec={instrument} />
+  {#if naming}
+    <form
+      class="flex gap-2"
+      onsubmit={(e) => {
+        e.preventDefault()
+        commitName()
+      }}
+    >
+      <input
+        bind:value={name}
+        use:focusOnMount
+        aria-label="Sound name"
+        class="h-9 min-w-0 flex-1 rounded bg-raised px-2.5 outline-none focus:ring-1 focus:ring-fg"
+        onkeydown={(e) => e.key === 'Escape' && (e.stopPropagation(), (naming = null))}
+      />
+      <Button type="submit" variant="accent">{naming === 'new' ? 'Save' : 'Rename'}</Button>
+    </form>
+  {:else if synth}
+    <div class="flex flex-wrap gap-1.5">
+      {#if sound.isCustom}<Button onclick={() => sound.save()} disabled={!sound.modified}>Save</Button>{/if}
+      <Button onclick={() => startNaming('new')}>Save as…</Button>
+      <Button onclick={() => sound.reset()} disabled={!sound.modified}>Revert</Button>
+      {#if sound.isCustom}
+        <Button onclick={() => startNaming('rename')}>Rename</Button>
+        <Button variant="danger" onclick={() => sound.remove()}>Delete</Button>
+      {/if}
+    </div>
   {/if}
-</Panel>
+{/snippet}
+
+{#snippet body()}
+  {#if synth}
+    <div class={['grid min-h-0', !docked && '-mx-5 -my-3']}>
+      <SoundEditor patch={sound.patch} edit={(change) => change(sound.patch)} {controls} {section} onsection={(id) => (section = id)} bind:osc tabs="top" {voice} />
+    </div>
+  {:else}
+    <div class={['grid content-start gap-2', docked && 'p-3']}>
+      {@render voice()}
+      <p class="text-xs text-muted">{sound.preset.name} plays recordings of a real piano: pick a synth sound to shape your own.</p>
+    </div>
+  {/if}
+{/snippet}
+
+{#if docked}
+  <div class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+    <h2 class="truncate px-4 pt-3 pb-1 text-lg font-medium">Sound{sound.modified ? ' · edited' : ''}</h2>
+    {@render body()}
+  </div>
+{:else}
+  <Panel title="Sound{sound.modified ? ' · edited' : ''}" modal={false} width={420} onclose={() => onclose?.()}>
+    {@render body()}
+  </Panel>
+{/if}

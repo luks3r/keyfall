@@ -1,7 +1,7 @@
 <script lang="ts">
   import { choiceKnob, knobs, rangeKnob, type KnobSpec } from '../../device/knobs.svelte'
   import { shortcuts } from '../../device/shortcuts.svelte'
-  import SoftKeys from '../../device/SoftKeys.svelte'
+  import SoftKeys, { type SoftKey } from '../../device/SoftKeys.svelte'
   import type { ArrangementSnap } from '../arrangement'
   import Arrangement, { ARRANGEMENT_ZOOMS } from '../Arrangement.svelte'
   import { studio } from '../studio.svelte'
@@ -41,6 +41,24 @@
     studio.addArrangementClip(track.id, studio.insertion?.trackId === track.id ? studio.insertion.beat : studio.position)
   }
 
+  /** The toolbar follows the selection: a selected clip's actions come first, so holding a clip is never the only way. */
+  const clipKeys = $derived.by((): SoftKey[] => {
+    const track = studio.track
+    if (!selected || !track) return []
+    return [
+      { label: 'Edit clip', onclick: () => studio.openClipEditor(track.id, selected.id), title: 'Open the selected clip on the Pattern screen', shortcut: 'Enter' },
+      { label: 'Duplicate', onclick: () => studio.duplicateClip(track, selected), title: 'Copy the selected clip after itself', shortcut: 'Mod+D' },
+      { label: 'Loop clip', onclick: () => studio.loopClip(track.id, selected.id), title: 'Loop the song around the selected clip' },
+      { label: 'Delete clip', onclick: () => studio.removeClip(track, selected.id), shortcut: 'Delete' },
+    ]
+  })
+  const songKeys = $derived<SoftKey[]>([
+    { label: 'New clip', onclick: newClip, title: 'New clip at the playhead on the selected track', shortcut: 'Alt+N' },
+    { label: 'Open MIDI', onclick: onimport, shortcut: 'Mod+O' },
+    { label: 'Export MIDI', onclick: onexport, shortcut: 'Mod+E' },
+    { label: 'Learn', onclick: onpractice, title: 'Learn this song on the Piano with falling notes' },
+  ])
+
   $effect(() =>
     shortcuts.use('Song', [
       { keys: ['Alt+N'], label: 'New clip at the playhead', run: newClip },
@@ -55,14 +73,5 @@
 
 <div class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]">
   <Arrangement bind:zoomIndex />
-  <SoftKeys
-    keys={[
-      { label: 'New clip', onclick: newClip, title: 'New clip at the playhead on the selected track', shortcut: 'Alt+N' },
-      { label: 'Edit clip', onclick: () => selected && studio.track && studio.openClipEditor(studio.track.id, selected.id), disabled: !selected, title: 'Open the selected clip on the Pattern screen' },
-      { label: 'Loop clip', onclick: () => selected && studio.track && studio.loopClip(studio.track.id, selected.id), disabled: !selected, title: 'Loop the song around the selected clip' },
-      { label: 'Open MIDI', onclick: onimport, shortcut: 'Mod+O' },
-      { label: 'Export MIDI', onclick: onexport, shortcut: 'Mod+E' },
-      { label: 'Learn', onclick: onpractice, title: 'Learn this song on the Piano with falling notes' },
-    ]}
-  />
+  <SoftKeys keys={[...clipKeys, ...songKeys]} />
 </div>

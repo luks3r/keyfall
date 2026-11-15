@@ -1,5 +1,5 @@
 import type { Sample } from '../platform'
-import { DRUM_RATE, renderDrum } from './drums'
+import { DRUM_RATE, DRUMS, drumKey, renderDrum } from './drums'
 
 /**
  * Pad samples by key: `builtin:<drum id>` are synthesized, `user:<id>` are files the user loaded, kept in
@@ -31,6 +31,9 @@ async function transact<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore
     request.onerror = () => reject(request.error)
   })
 }
+
+/** A fresh set of pads for kit `kit` (see `KITS`). */
+export const kitPads = (kit: string) => DRUMS.map((d) => ({ midi: d.midi, name: d.name, sample: BUILTIN + drumKey(kit, d.id) }))
 
 export function loadSample(key: string): Promise<Sample | null> {
   const known = cache.get(key)

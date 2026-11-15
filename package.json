@@ -21,6 +21,7 @@
     "bench:dsp": "cargo run -q -p keyfall-dsp --release --example render && bun run wasm && bun bench/dsp-wasm.ts",
     "bench:audio": "bun run wasm && bun bench/audio.ts",
     "check:device": "bun run wasm && bun bench/check-device.ts",
+    "check:ui": "bun run wasm && bun bench/check-ui.ts",
     "check:rooms": "bun run build && cargo build -q --release -p keyfall-room && bun bench/check-rooms.ts"
   },
   "devDependencies": {

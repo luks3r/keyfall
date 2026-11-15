@@ -6,7 +6,7 @@
   import { trackColor } from '../Arrangement.svelte'
   import { controls } from '../controls.svelte'
   import { CHORDS, LIVE_DEFAULTS, live, MAX_TRANSPOSE, NOTE_NAMES, SCALES, mapNote, type ChordName, type ScaleName } from '../live.svelte'
-  import { DEFAULT_TEMPO, type Clip, type Track } from '../project'
+  import { DEFAULT_TEMPO, MAX_TEMPO, MIN_TEMPO, type Clip, type Track } from '../project'
   import { LAUNCH_KEYS, STOP, studio } from '../studio.svelte'
   import { studioUi } from '../ui.svelte'
 
@@ -71,7 +71,7 @@
   const specs = $derived.by((): (KnobSpec | null)[] =>
     page === 0
       ? [
-          rangeKnob('Tempo', 40, 240, () => project.tempo, (v) => studio.setTempo(v), (v) => `${Math.round(v)} bpm`, { initial: DEFAULT_TEMPO, step: 1 }),
+          rangeKnob('Tempo', MIN_TEMPO, MAX_TEMPO, () => project.tempo, (v) => studio.setTempo(v), (v) => `${Math.round(v)} bpm`, { initial: DEFAULT_TEMPO, step: 1 }),
           choiceKnob('Launch on', QUANTIZE, () => project.quantize, (v) => (project.quantize = v), (v) => QUANTIZE_NAMES.get(v) ?? '', DEFAULT_QUANTIZE),
           choiceKnob('Scene', scenes, () => studio.selectedScene, (v) => (studio.selectedScene = v), (v) => project.scenes[v]?.name ?? '', 0),
           percentKnob('Velocity', () => settings.velocity, (v) => (settings.velocity = v), LIVE_DEFAULTS.velocity, 0.1),

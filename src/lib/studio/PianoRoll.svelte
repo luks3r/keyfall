@@ -18,6 +18,8 @@
    * Click empty space to add a note, drag on it to select; drag notes to move, their right edge to resize,
    * Alt-drag to copy; double-click or right-click a note to delete it; ⌘/Ctrl-scroll zooms. The selection is the
    * Pattern screen's (shared with the step grid); its keys live there.
+   * Touch: tap adds or removes a note, drag a note to move it (its end to resize), swipe to scroll, pinch to zoom,
+   * hold still on empty space to draw a selection box.
    */
   let {
     track,
@@ -30,6 +32,12 @@
 
   const compact = new MediaQuery('(pointer: coarse)')
   const EDGE = 8
+  /** A fingertip needs a wider grip on a note's end to resize it. */
+  const TOUCH_EDGE = 18
+  /** Touch: a still finger this long on empty space starts a selection box instead of scrolling. */
+  const HOLD_MS = 350
+  /** Pinch distance ratio per zoom step. */
+  const PINCH_STEP = 1.25
   const DRAG_SLOP = 3
   const AUDITION_MS = 220
   const DEFAULT_VELOCITY = 0.8
@@ -60,12 +68,12 @@
     const local = studio.position - clip.start
     return local >= 0 && local < clip.length ? local : null
   })
-  const row = $derived(kit ? (compact.current ? 28 : 22) : compact.current ? 22 : 18)
+  const row = $derived(kit ? (compact.current ? 32 : 22) : compact.current ? 28 : 18)
   const zoom = $derived(ZOOMS[zoomIndex])
   const bar = $derived(studio.project.beatsPerBar)
   const width = $derived(clip.length * zoom)
 
-  type Drag = { kind: 'move' | 'resize'; x: number; y: number; origins: Map<ClipNote, ClipNote>; moved: boolean; lastPitch: number; copy: boolean }
+  type Drag = { kind: 'move' | 'resize'; x: number; y: number; origins: Map<ClipNote, ClipNote>; moved: boolean; lastPitch: number; copy: boolean; touch: ClipNote | null }
   let drag: Drag | null = null
 
   $effect(() => {
@@ -85,8 +93,80 @@
     return { x: e.clientX - rect.left, y: e.clientY - rect.top }
   }
 
-  /** Empty space: a click adds a note, a drag selects the notes it covers (Shift adds to the selection). */
+  /** Fingers on the lane: where each is, for scrolling with one and zooming with two. */
+  const fingers = new Map<number, { x: number; y: number }>()
+
+  /**
+   * A finger on empty space: a tap adds a note, a swipe scrolls, two fingers pinch to zoom, and a finger held still
+   * first draws a selection box (as a mouse drag does).
+   */
+  function onLaneTouch(e: PointerEvent) {
+    fingers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (fingers.size > 1) return // The first finger's handler turns into a pinch.
+    lane.setPointerCapture(e.pointerId)
+    const origin = { left: scroller.scrollLeft, top: scroller.scrollTop }
+    let mode: 'wait' | 'pan' | 'pinch' | 'box' = 'wait'
+    let spread = 0
+    const distance = () => {
+      const [a, b] = [...fingers.values()]
+      return Math.hypot(a.x - b.x, a.y - b.y)
+    }
+    const timer = setTimeout(() => {
+      if (mode !== 'wait') return
+      mode = 'box'
+      navigator.vibrate?.(8)
+      stop()
+      onMouseLane(e)
+    }, HOLD_MS)
+    const move = (event: PointerEvent) => {
+      if (!fingers.has(event.pointerId)) return
+      fingers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (fingers.size > 1) {
+        if (mode !== 'pinch') ((mode = 'pinch'), (spread = distance()))
+        const ratio = distance() / Math.max(1, spread)
+        if (ratio > PINCH_STEP || ratio < 1 / PINCH_STEP) {
+          zoomIndex = Math.max(0, Math.min(ZOOMS.length - 1, zoomIndex + (ratio > 1 ? 1 : -1)))
+          spread = distance()
+        }
+        return
+      }
+      if (event.pointerId !== e.pointerId || mode === 'pinch') return
+      const dx = event.clientX - e.clientX
+      const dy = event.clientY - e.clientY
+      if (mode === 'wait' && Math.hypot(dx, dy) > DRAG_SLOP * 3) mode = 'pan'
+      if (mode !== 'pan') return
+      scroller.scrollLeft = origin.left - dx
+      scroller.scrollTop = origin.top - dy
+    }
+    const lift = (event: PointerEvent) => {
+      fingers.delete(event.pointerId)
+      if (event.pointerId !== e.pointerId && fingers.size) return
+      clearTimeout(timer)
+      stop()
+      fingers.clear()
+      if (mode === 'wait' && event.type === 'pointerup') {
+        const at = local(e)
+        patternView.insert = Math.max(0, Math.min(clip.length, Math.floor(at.x / zoom / grid) * grid))
+        addAt(at.x, at.y)
+      }
+    }
+    const stop = () => {
+      lane.removeEventListener('pointermove', move)
+      lane.removeEventListener('pointerup', lift)
+      lane.removeEventListener('pointercancel', lift)
+    }
+    lane.addEventListener('pointermove', move)
+    lane.addEventListener('pointerup', lift)
+    lane.addEventListener('pointercancel', lift)
+  }
+
   function onLaneDown(e: PointerEvent) {
+    if (e.pointerType === 'touch' && !e.shiftKey) return onLaneTouch(e)
+    onMouseLane(e)
+  }
+
+  /** Empty space: a click adds a note, a drag selects the notes it covers (Shift adds to the selection). */
+  function onMouseLane(e: PointerEvent) {
     if (e.button !== 0) return
     lane.setPointerCapture(e.pointerId)
     scroller.focus({ preventScroll: true })
@@ -141,13 +221,15 @@
     patternView.insert = Math.floor(note.start / grid) * grid
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     drag = {
-      kind: rect.right - e.clientX < EDGE ? 'resize' : 'move',
+      kind: rect.right - e.clientX < (e.pointerType === 'touch' ? Math.min(TOUCH_EDGE, rect.width / 2) : EDGE) ? 'resize' : 'move',
       x: e.clientX,
       y: e.clientY,
       origins: new Map(patternView.selection(clip).map((n) => [n, { ...n }])),
       moved: false,
       lastPitch: note.pitch,
       copy: e.altKey,
+      // A finger has no right-click or reliable double-tap: tapping a note removes it, as tapping a step does.
+      touch: e.pointerType === 'touch' ? note : null,
     }
     audition(note.pitch, note.velocity)
   }
@@ -207,7 +289,10 @@
     data-pattern-editor
     aria-label="Note grid"
     onpointermove={onMove}
-    onpointerup={() => (drag = null)}
+    onpointerup={() => {
+      if (drag?.touch && !drag.moved) deleteNotes(new Set([drag.touch]))
+      drag = null
+    }}
     onpointercancel={() => (drag = null)}
     onwheel={onWheel}
     oncontextmenu={(e) => e.preventDefault()}

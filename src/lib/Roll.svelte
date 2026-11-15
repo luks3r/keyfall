@@ -6,9 +6,11 @@
   import { Mark, type Player } from './player.svelte'
   import { clock, LOCAL } from './sandbox.svelte'
   import { settings } from './settings.svelte'
+  import { splitRows } from './keys-window'
   import { handFor, lowerBound } from './song'
 
-  let { player }: { player: Player } = $props()
+  /** `keysShare`: part of the height the keys take, when the keys own the screen (Play on a phone). */
+  let { player, keysShare }: { player: Player; keysShare?: number } = $props()
   let canvas: HTMLCanvasElement
 
   const MIN_VELOCITY = 0.45
@@ -27,7 +29,7 @@
   const isBlack = (midi: number) => BLACK[midi % 12]
 
   $effect(() => {
-    void [settings.keymap, settings.editing, settings.editTarget, settings.lookahead, settings.labels, player.root, player.mode, player.range]
+    void [settings.keymap, settings.editing, settings.editTarget, settings.lookahead, settings.labels, player.root, player.mode, player.range, player.rows, keysShare]
     player.dirty = true
   })
 
@@ -39,8 +41,13 @@
     let width = 0
     let height = 0
     let top = 0
-    let blackHeight = 0
     let range: readonly [number, number] = [0, 0]
+    /** Where each key is drawn: its row's top, the bottom of a white key, the bottom of a black one. */
+    const keyTop = new Float32Array(128)
+    const whiteBottom = new Float32Array(128)
+    const blackBottom = new Float32Array(128)
+    /** Rows of keys, highest first: one, or two stacked (Play on a phone, by choice). */
+    let rows: { lo: number; hi: number }[] = []
 
     const resize = () => {
       const dpr = devicePixelRatio || 1
@@ -72,10 +79,12 @@
     }
 
     const hit = (x: number, y: number) => {
-      const [lo, hi] = range
       if (y < top || y > height) return null
-      if (y < top + blackHeight) for (let m = lo; m <= hi; m++) if (isBlack(m) && x >= xs[m] && x < xs[m] + ws[m]) return m
-      for (let m = lo; m <= hi; m++) if (!isBlack(m) && x >= xs[m] && x < xs[m] + ws[m]) return m
+      for (const { lo, hi } of rows) {
+        if (y < keyTop[lo] || y > whiteBottom[lo]) continue
+        for (let m = lo; m <= hi; m++) if (isBlack(m) && y < blackBottom[m] && x >= xs[m] && x < xs[m] + ws[m]) return m
+        for (let m = lo; m <= hi; m++) if (!isBlack(m) && x >= xs[m] && x < xs[m] + ws[m]) return m
+      }
       return null
     }
 
@@ -122,11 +131,24 @@
       if (width <= 0 || height <= 0) return
       range = player.range
       const [lo, hi] = range
-      const ww = layout(lo, hi)
-      const share = touch.current ? 0.42 : 0.26
-      const keysHeight = Math.min(Math.max(height * share, Math.min(height * 0.8, MIN_KEYS)), ww * (touch.current ? 7 : 5.2))
+      // Two rows split the keys in half at a white key; the higher half sits on top, as on a stacked keyboard.
+      rows = [{ lo, hi }]
+      if (player.rows === 2) rows = splitRows(lo, hi)
+      let ww = Infinity
+      for (const row of rows) ww = Math.min(ww, layout(row.lo, row.hi))
+      const share = keysShare ?? (touch.current ? 0.42 : 0.26)
+      // Keys stay key-shaped, except when they own the screen: then taller keys are simply more to hit.
+      const tallest = ww * (keysShare ? 14 : touch.current ? 7 : 5.2) * rows.length
+      const keysHeight = Math.min(Math.max(height * share, Math.min(height * 0.8, MIN_KEYS)), tallest)
       top = height - keysHeight
-      blackHeight = keysHeight * 0.62
+      const rowHeight = keysHeight / rows.length
+      rows.forEach(({ lo: from, hi: to }, i) => {
+        for (let m = from; m <= to; m++) {
+          keyTop[m] = top + i * rowHeight
+          whiteBottom[m] = keyTop[m] + rowHeight
+          blackBottom[m] = keyTop[m] + rowHeight * 0.62
+        }
+      })
       const lookahead = settings.lookahead
       const pps = top / lookahead
       const base = player.root
@@ -136,7 +158,7 @@
       ctx.fillStyle = COLORS.bg
       ctx.fillRect(0, 0, width, height)
 
-      if (keymap.codes.size) {
+      if (keymap.codes.size && rows.length === 1) {
         const first = Math.max(lo, base + keymap.lo)
         const last = Math.min(hi, base + keymap.hi)
         ctx.fillStyle = COLORS.lane
@@ -168,19 +190,19 @@
         if (isBlack(m)) continue
         ctx.fillStyle = lit[m] ?? COLORS.white
         ctx.beginPath()
-        ctx.roundRect(xs[m] + 0.5, top, ww - 1, keysHeight - 1, [0, 0, 4, 4])
+        ctx.roundRect(xs[m] + 0.5, keyTop[m], ws[m] - 1, whiteBottom[m] - keyTop[m] - 1, [0, 0, 4, 4])
         ctx.fill()
       }
       for (let m = lo; m <= hi; m++) {
         if (!isBlack(m)) continue
         ctx.fillStyle = lit[m] ?? COLORS.black
         ctx.beginPath()
-        ctx.roundRect(xs[m], top, ws[m], blackHeight, [0, 0, 3, 3])
+        ctx.roundRect(xs[m], keyTop[m], ws[m], blackBottom[m] - keyTop[m], [0, 0, 3, 3])
         ctx.fill()
       }
 
       ctx.fillStyle = COLORS.seam
-      ctx.fillRect(0, top, width, 4)
+      for (const row of rows) ctx.fillRect(0, keyTop[row.lo], width, 4)
       ctx.fillStyle = COLORS.line
       ctx.fillRect(0, top - 1, width, 2)
 
@@ -192,7 +214,7 @@
         const black = isBlack(m)
         ctx.fillStyle = black ? COLORS.labelOnBlack : COLORS.labelOnWhite
         const label = keymap.shifted && black && code.startsWith(SHIFT) ? symbol(code.slice(SHIFT.length)) : symbol(code)
-        ctx.fillText(label, xs[m] + ws[m] / 2, black ? top + blackHeight - 8 : height - 12)
+        ctx.fillText(label, xs[m] + ws[m] / 2, black ? blackBottom[m] - 8 : whiteBottom[m] - 12)
       }
     }
 
@@ -200,9 +222,8 @@
     const fingers = new Uint8Array(128)
     /** Velocity from where the key is struck: near the front edge plays louder, like a real key's lever. */
     const velocityAt = (midi: number, y: number) => {
-      const keyTop = top
-      const keyBottom = isBlack(midi) ? top + blackHeight : height
-      const depth = Math.max(0, Math.min(1, (y - keyTop) / Math.max(1, keyBottom - keyTop)))
+      const bottom = isBlack(midi) ? blackBottom[midi] : whiteBottom[midi]
+      const depth = Math.max(0, Math.min(1, (y - keyTop[midi]) / Math.max(1, bottom - keyTop[midi])))
       return MIN_VELOCITY + (MAX_VELOCITY - MIN_VELOCITY) * depth
     }
     const playPointer = (pointer: number, midi: number | null, y = 0) => {

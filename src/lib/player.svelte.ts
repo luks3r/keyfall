@@ -1,7 +1,10 @@
 import { engine, type Voice } from './audio/engine.svelte'
 import type { NoteSink } from './input/sink'
 import { Sandbox } from './sandbox.svelte'
+import { MediaQuery } from 'svelte/reactivity'
 import { innerWidth } from 'svelte/reactivity/window'
+import { centered as centeredOn, follow, HIGHEST_NOTE, LOWEST_NOTE, whiteAtOrAbove, whiteAtOrBelow, whitesFrom, whitesIn } from './keys-window'
+import { layout } from './ui/layout.svelte'
 import { RANGE_AUTO, RANGE_FULL, settings } from './settings.svelte'
 import { demo, lowerBound, type Song } from './song'
 
@@ -11,11 +14,15 @@ export const MODES: Mode[] = ['wait', 'listen']
 export const LEAD_IN = 2
 const HIT_WINDOW = 0.25
 const TAIL = 1
-const LOWEST_NOTE = 21
-const HIGHEST_NOTE = 108
 export const DEFAULT_VELOCITY = 0.8
 const DRIFT = 0.15
 const MIN_OCTAVE_WIDTH = 170
+/** Narrowest white key a fingertip can hit; under a mouse keys may be as narrow as MIN_OCTAVE_WIDTH allows. */
+const MIN_TOUCH_KEY = 40
+/** Learn pans the keys to cover the notes due within this many seconds. */
+const FOLLOW_AHEAD = 2
+
+const coarse = new MediaQuery('pointer: coarse')
 
 export const Mark = { Pending: 0, Hit: 1, Auto: 2 } as const
 
@@ -71,6 +78,22 @@ export class Player implements NoteSink {
   canControl = $derived(!this.net || this.net.isHost)
   playable = $derived(!this.net || this.net.seat !== null)
 
+  /** Lowest key of the keyboard while Learn follows a song wider than the screen. */
+  pan = $state<number | null>(null)
+
+  /** Two stacked rows of keys: Play on a phone held upright, when chosen in settings. */
+  rows = $derived<1 | 2>(this.studio && !this.studioKeys && coarse.current && layout.kind === 'upright' && settings.keyRows === 2 ? 2 : 1)
+
+  /** How many white keys fit across, and the song's lowest and highest note (or the keys' when there is no song). */
+  #span = $derived.by(() => {
+    const width = innerWidth.current ?? Infinity
+    const whites = Math.max(7, Math.floor(width / (coarse.current ? MIN_TOUCH_KEY : MIN_OCTAVE_WIDTH / 7)))
+    let lo = Infinity
+    let hi = -Infinity
+    if (!this.studio) for (const { midi } of this.song.notes) ((lo = Math.min(lo, midi)), (hi = Math.max(hi, midi)))
+    return { whites, lo, hi, wide: lo <= hi && whitesIn(whiteAtOrBelow(lo), whiteAtOrAbove(hi)) > whites }
+  })
+
   range = $derived.by((): readonly [number, number] => {
     const { lo: low, hi: high } = settings.keymap
     const keysLo = this.root + low
@@ -83,19 +106,41 @@ export class Player implements NoteSink {
       return [start, Math.min(127, start + span)]
     }
     if (settings.range !== RANGE_AUTO) return centered(Number(settings.range))
+    const { whites, wide } = this.#span
+    // A song wider than the screen: a window of keys that follows the notes (see #follow).
+    if (wide) return whitesFrom(this.pan ?? whiteAtOrBelow(this.#span.lo), whites)
+    // Touch, no song to fit: keys from the octave you picked, as many as fit at fingertip size (twice over in two rows).
+    if (coarse.current && (this.studio || this.#span.lo > this.#span.hi)) return whitesFrom(this.root - (((this.root % 12) + 12) % 12), whites * this.rows)
+    // The song fits: centre it, keeping every key fingertip-sized.
+    if (coarse.current) return centeredOn(this.#span.lo, this.#span.hi, whites)
     let lo = keysLo
     let hi = keysHi
-    if (!this.studio) {
-      for (const { midi } of this.song.notes) {
-        if (midi < lo) lo = midi
-        if (midi > hi) hi = midi
-      }
-    }
+    if (!this.studio) ((lo = Math.min(lo, this.#span.lo)), (hi = Math.max(hi, this.#span.hi)))
     lo = Math.max(0, lo - (lo % 12))
     hi = Math.min(127, hi + 11 - (hi % 12))
     const fits = Math.max(2, Math.floor((innerWidth.current ?? Infinity) / MIN_OCTAVE_WIDTH))
     return (hi - lo + 1) / 12 > fits ? centered(fits) : [lo, hi]
   })
+
+  /** The song needs more keys than fit across the screen. */
+  get wide() {
+    return this.#span.wide
+  }
+
+  /** Learn with a song wider than the screen: move the keys only when the coming notes leave them. */
+  #follow() {
+    if (this.studio || settings.range !== RANGE_AUTO || !this.#span.wide) return
+    const { notes } = this.song
+    let min = Infinity
+    let max = -Infinity
+    for (let i = lowerBound(notes, this.time); i < notes.length && notes[i].time < this.time + FOLLOW_AHEAD; i++) {
+      min = Math.min(min, notes[i].midi)
+      max = Math.max(max, notes[i].midi)
+    }
+    if (min > max) return
+    const start = follow(this.range, min, max, this.#span.lo, this.#span.hi, this.#span.whites)
+    if (start !== this.range[0]) this.pan = start
+  }
 
   readonly sandbox = new Sandbox()
   readonly held = new Set<number>()
@@ -294,6 +339,7 @@ export class Player implements NoteSink {
     }
 
     this.time = time
+    this.#follow()
     if (this.finished && this.canControl) this.toggle()
   }
 
@@ -324,12 +370,15 @@ export class Player implements NoteSink {
     this.marks = new Uint8Array(this.song.notes.length)
     this.hits = 0
     this.misses = 0
+    this.pan = null
+    this.#follow()
     this.dirty = true
   }
 
   #jump(time: number) {
     this.time = Math.max(-LEAD_IN, Math.min(time, this.song.duration + TAIL))
     this.#cursor = lowerBound(this.song.notes, this.time)
+    this.#follow()
     this.dirty = true
   }
 

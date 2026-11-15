@@ -1,15 +1,21 @@
-import type { Clip, ClipNote } from './project'
+import { stepOf, type Clip, type ClipNote } from './project'
 import { studio } from './studio.svelte'
 
-/** Step lengths offered on the Step knob, in beats. */
-export const RESOLUTIONS = [1 / 2, 1 / 4, 1 / 6, 1 / 8] as const
-export const RESOLUTION_NAMES = new Map<number, string>([
-  [1 / 2, '1/8'],
-  [1 / 4, '1/16'],
-  [1 / 6, '1/16T'],
-  [1 / 8, '1/32'],
+/**
+ * Pattern speeds, slowest first: each is a step length in beats. A 16-step pattern of 1/16 notes (1×) lasts a bar;
+ * at ½× each step is an 1/8 note, so the same steps take two bars.
+ */
+export const SPEEDS = [1, 1 / 2, 1 / 3, 1 / 4, 1 / 6, 1 / 8] as const
+export const SPEED_NAMES = new Map<number, string>([
+  [1, '¼× · 1/4 steps'],
+  [1 / 2, '½× · 1/8 steps'],
+  [1 / 3, '¾× · 1/8T steps'],
+  [1 / 4, '1× · 1/16 steps'],
+  [1 / 6, '1.5× · 1/16T steps'],
+  [1 / 8, '2× · 1/32 steps'],
 ])
 export const MAX_BARS = 16
+export const MAX_STEPS = 64
 
 const EPSILON = 1e-6
 
@@ -22,7 +28,6 @@ export const notesIn = (clip: Clip, pitch: number, from: number, to: number) =>
  * so a selection made on one page is the selection on the other.
  */
 class PatternView {
-  resolution = $state<number>(1 / 4)
   /** Lowest note of melodic rows. */
   base = $state(48)
   /** Velocity of newly drawn steps. */
@@ -43,7 +48,7 @@ class PatternView {
   }
 
   /** Copies the selection; `step` rounds the span the copies tile by. */
-  copy(clip: Clip, step = this.resolution) {
+  copy(clip: Clip, step = stepOf(clip)) {
     const notes = this.selection(clip)
     if (!notes.length) return false
     const from = Math.floor(Math.min(...notes.map((n) => n.start)) / step + EPSILON) * step
@@ -56,7 +61,7 @@ class PatternView {
   }
 
   /** Copy, then delete; paste goes back where the notes were taken from. */
-  cut(clip: Clip, step = this.resolution) {
+  cut(clip: Clip, step = stepOf(clip)) {
     if (!this.copy(clip, step)) return
     this.insert = Math.max(0, this.insert - this.clipboard!.span)
     this.remove(clip)
@@ -75,7 +80,7 @@ class PatternView {
   }
 
   /** Copies the selection right after itself and selects the copies. */
-  duplicate(clip: Clip, step = this.resolution) {
+  duplicate(clip: Clip, step = stepOf(clip)) {
     const notes = this.selection(clip)
     if (!notes.length) return
     const from = Math.min(...notes.map((n) => n.start))
@@ -112,7 +117,7 @@ class PatternView {
     const chosen = this.selection(clip)
     const notes = chosen.length ? chosen : clip.notes
     studio.edit(() => {
-      for (const note of notes) note.start = (((note.start + direction * this.resolution) % clip.length) + clip.length) % clip.length
+      for (const note of notes) note.start = (((note.start + direction * stepOf(clip)) % clip.length) + clip.length) % clip.length
     })
   }
   double(clip: Clip) {
@@ -139,8 +144,41 @@ class PatternView {
     })
   }
 
+  /** Number of steps; the pattern grows or shrinks at its end, whatever the bar size. */
+  setSteps(clip: Clip, steps: number) {
+    const max = Math.min(MAX_STEPS, Math.floor((MAX_BARS * studio.project.beatsPerBar) / stepOf(clip)))
+    const length = Math.max(1, Math.min(max, Math.round(steps))) * stepOf(clip)
+    if (Math.abs(length - clip.length) < EPSILON) return
+    studio.tweak(() => {
+      if (clip.repeat >= clip.length) clip.repeat = length
+      clip.length = length
+    })
+  }
+
+  /**
+   * Plays the pattern slower or faster against the tempo: every note keeps its step, and steps get longer or
+   * shorter. Returns false when the slower pattern would be too long.
+   */
+  setSpeed(clip: Clip, step: number) {
+    const factor = step / stepOf(clip)
+    if (Math.abs(factor - 1) < EPSILON) return true
+    if (clip.length * factor > MAX_BARS * studio.project.beatsPerBar + EPSILON) return false
+    studio.tweak(() => {
+      for (const note of clip.notes) {
+        note.start *= factor
+        note.length *= factor
+      }
+      clip.length *= factor
+      clip.repeat *= factor
+      clip.step = step
+    })
+    if (studio.stepInput?.clip === clip.id) studio.stepInput.resolution = step
+    this.insert *= factor
+    return true
+  }
+
   toggleStepInput(clip: Clip) {
-    studio.stepInput = studio.stepInput?.clip === clip.id ? null : { clip: clip.id, cursor: 0, resolution: this.resolution }
+    studio.stepInput = studio.stepInput?.clip === clip.id ? null : { clip: clip.id, cursor: 0, resolution: stepOf(clip) }
   }
 }
 

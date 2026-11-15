@@ -25,10 +25,12 @@
   {/each}
 {/snippet}
 
+<!-- Native on purpose: phones open their own picker, which beats any custom list on a small screen. -->
 <select
   bind:value
   {disabled}
-  class="h-9 w-full cursor-pointer truncate rounded-lg bg-raised px-2.5 text-fg transition-colors outline-none hover:enabled:bg-hover disabled:cursor-default disabled:opacity-50"
+  data-ui
+  class="h-control w-full cursor-pointer truncate rounded-control bg-raised px-2.5 text-fg transition-colors outline-none hover:enabled:bg-hover disabled:cursor-default disabled:opacity-50"
 >
   {#each groups as [group, list] (group)}
     {#if group}

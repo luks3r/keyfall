@@ -3,7 +3,18 @@ import { createSong, handFor, type Song } from '../song'
 
 /** Times are in beats. A clip plays `notes` from its start; content longer than `repeat` loops, which launcher slots will reuse. */
 export type ClipNote = { pitch: number; start: number; length: number; velocity: number }
-export type Clip = { id: string; start: number; length: number; repeat: number; quantize: number; notes: ClipNote[]; /** Preserves repeat intent when a clip is trimmed to its period or shorter. */ looped?: boolean }
+export type Clip = {
+  id: string
+  start: number
+  length: number
+  repeat: number
+  quantize: number
+  notes: ClipNote[]
+  /** Preserves repeat intent when a clip is trimmed to its period or shorter. */
+  looped?: boolean
+  /** Beats per step on the step grid (default a 1/16 note); sets how fast the pattern plays against the tempo. */
+  step?: number
+}
 /** A drum or sample pad: plays `sample` (see `src/lib/audio/samples.ts`) when `midi` is hit. */
 export type Pad = { midi: number; name: string; sample: string | null }
 /**
@@ -43,9 +54,14 @@ export type Project = {
 export type Scheduled = { track: number; pitch: number; start: number; end: number; velocity: number }
 
 export const DEFAULT_TEMPO = 120
+export const MIN_TEMPO = 20
+export const MAX_TEMPO = 300
+export const MAX_BEATS_PER_BAR = 12
 export const DEFAULT_PRESET = 'piano'
 export const KIT = 'kit'
 export const DEFAULT_SCENES = 8
+export const DEFAULT_STEP = 1 / 4
+export const stepOf = (clip: Clip) => clip.step ?? DEFAULT_STEP
 export const QUANTIZE_GRIDS = [0, 1, 0.5, 0.25, 1 / 3, 0.125] as const
 const MIN_NOTE = 1 / 64
 
@@ -157,13 +173,17 @@ export function toSong(project: Project, only?: Set<string>): Song {
     hand: handFor(pitch),
     part: track,
   }))
-  return createSong(project.name, tracks.map((track) => track.name), notes)
+  return { ...createSong(project.name, tracks.map((track) => track.name), notes), tempo: project.tempo, beatsPerBar: project.beatsPerBar }
 }
 
-/** Producing view of a song: one track per part, one clip per track, at the default tempo. */
+/** Producing view of a song: one track per part, one clip per track, at the song's tempo and bar size. */
 export function fromSong(song: Song): Project {
   const project = createProject(song.name)
-  const beats = DEFAULT_TEMPO / 60
+  const tempo = Math.max(MIN_TEMPO, Math.min(MAX_TEMPO, song.tempo ?? DEFAULT_TEMPO))
+  project.tempo = Math.round(tempo)
+  project.beatsPerBar = song.beatsPerBar ?? project.beatsPerBar
+  project.loop.end = 2 * project.beatsPerBar
+  const beats = tempo / 60
   const bar = project.beatsPerBar
   project.tracks = song.parts.map((name) => createTrack(name, DEFAULT_PRESET, project.scenes.length))
   const length = Math.max(bar, Math.ceil((song.duration * beats) / bar) * bar)

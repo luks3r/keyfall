@@ -25,9 +25,15 @@ class Shortcuts {
     return () => untrack(() => (this.groups = this.groups.filter((g) => g !== group)))
   }
 
-  /** Runs the newest matching shortcut; returns whether one ran. */
+  /**
+   * Runs the newest matching shortcut; returns whether one ran. With a menu or dialog open, plain keys (arrows,
+   * Enter, Delete, Escape) belong to it; combos with ⌘/Ctrl or Alt still work.
+   */
   handle(e: KeyboardEvent) {
-    if (e.defaultPrevented || e.isComposing || inputFocus.blocked || isTyping(e.target)) return false
+    if (e.defaultPrevented || e.isComposing || isTyping(e.target)) return false
+    const combo = e.metaKey || e.ctrlKey || e.altKey
+    const inMenu = inputFocus.blocked || (e.target instanceof Element && !!e.target.closest('[role=menu],[role=dialog]'))
+    if (inMenu && !combo) return false
     for (let g = this.groups.length - 1; g >= 0; g--) {
       for (const item of this.groups[g].items) {
         if (!item.run || !item.keys.some((combo) => matches(combo, e)) || (item.when && !item.when())) continue

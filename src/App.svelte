@@ -19,6 +19,7 @@
   import { studio } from './lib/studio/studio.svelte'
   import SynthEditor from './lib/SynthEditor.svelte'
   import { theme } from './lib/theme.svelte'
+  import { layout } from './lib/ui/layout.svelte'
 
   const player = new Player()
   const midi = new MidiPorts(player)
@@ -35,6 +36,8 @@
   let fileInput: HTMLInputElement
 
   const inStudio = $derived(settings.workspace === 'studio')
+  /** #ui shows the UI library's gallery instead of the instrument. */
+  const gallery = location.hash === '#ui'
 
   onMount(() => {
     const stopTheme = theme.start()
@@ -55,6 +58,14 @@
     const shown = { text, error }
     toast = shown
     setTimeout(() => toast === shown && (toast = null), TOAST_MS)
+  }
+
+  /** The piano's sound: docked beside the display on desktop, a panel elsewhere. */
+  function showSound(toggle: boolean) {
+    if (layout.kind === 'desktop' && !inStudio) {
+      layout.inspector = toggle ? !layout.inspector : true
+      panel = null
+    } else panel = toggle && panel === 'synth' ? null : 'synth'
   }
 
   const exportMidi = () => saveSong(inStudio ? studio.practice() : player.song)
@@ -117,10 +128,12 @@
   ondrop={onDrop}
 />
 
-{#if inStudio}
+{#if gallery}
+  {#await import('./lib/ui/Gallery.svelte') then { default: Gallery }}<Gallery />{/await}
+{:else if inStudio}
   <StudioDevice {player} onimport={() => fileInput.click()} onexport={exportMidi} onpractice={practice} onsettings={() => (panel = 'settings')} />
 {:else}
-  <PianoDevice {player} {room} {invitedCode} onopen={() => fileInput.click()} onsave={exportMidi} onstudio={openInStudio} onsettings={() => (panel = 'settings')} />
+  <PianoDevice {player} {room} {invitedCode} onopen={() => fileInput.click()} onsave={exportMidi} onstudio={openInStudio} onsound={() => showSound(true)} onsettings={() => (panel = 'settings')} />
 {/if}
 
 {#if dragging}
@@ -131,7 +144,7 @@
 {/if}
 
 {#if panel === 'settings'}
-  <SettingsSheet {midi} onclose={() => (panel = null)} onsynth={() => (panel = 'synth')} onshortcuts={() => (panel = 'shortcuts')} />
+  <SettingsSheet {midi} onclose={() => (panel = null)} onsynth={() => showSound(false)} onshortcuts={() => (panel = 'shortcuts')} />
 {:else if panel === 'synth'}
   <SynthEditor onclose={() => (panel = null)} />
 {:else if panel === 'shortcuts'}

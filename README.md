@@ -29,6 +29,32 @@ bun run tauri dev
 bun run android:dev
 ```
 
+### Android release
+
+Android only installs signed APKs. Debug builds (`android:dev`, or `bun run tauri android build --apk --debug`) are signed with the SDK's debug key automatically. Release builds need your own key, created once:
+
+```sh
+keytool -genkeypair -v -keystore ~/.android/keyfall-upload.jks -storetype PKCS12 \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+Then point `src-tauri/gen/android/keystore.properties` at it (git ignores this file):
+
+```properties
+storeFile=/Users/you/.android/keyfall-upload.jks
+storePassword=…
+keyAlias=upload
+keyPassword=…
+```
+
+```sh
+bun run android:build                       # signed universal APK
+bun run tauri android build --apk --target aarch64   # smaller, 64-bit ARM phones only
+bun run tauri android build --aab           # bundle for Google Play
+```
+
+Without `keystore.properties` the release build is `app-universal-release-unsigned.apk`, which phones refuse to install. Back up the key and its passwords: updates must be signed with the same key, and a lost key means users have to uninstall to get a new version.
+
 ## Host it
 
 Simplest: one small Docker image serves the web app and rooms together.
@@ -73,3 +99,5 @@ bun run check:rooms  # three players, two servers: lobby, invites, codes
 ## License
 
 [MIT](LICENSE)
+
+Sampled sounds stream from elsewhere and keep their own licenses: Grand Piano is the [Salamander Grand Piano](https://archive.org/details/SalamanderGrandPianoV3) by Alexander Holm (CC BY 3.0), via [Tone.js](https://tonejs.github.io/audio/salamander/); the guitars, violin and cello are from [tonejs-instruments](https://github.com/nbrosowsky/tonejs-instruments) by Nicholaus Brosowsky (CC BY 3.0). The synths and drum kits are generated in the app.

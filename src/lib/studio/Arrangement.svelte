@@ -9,6 +9,7 @@
   import { tick } from 'svelte'
   import { MediaQuery } from 'svelte/reactivity'
   import Menu from '../ui/Menu.svelte'
+  import { hold, type Point } from '../ui/hold'
   import { scopeForTarget } from '../input/focus'
   import { inputFocus } from '../input/focus.svelte'
   import { studioUi } from './ui.svelte'
@@ -27,7 +28,9 @@
   const ZOOMS = ARRANGEMENT_ZOOMS
   let scroller: HTMLDivElement
   const zoom = $derived(ZOOMS[zoomIndex])
-  const header = $derived(compact.current ? 124 : 184)
+  /** Phones keep the header to the track number; names, mute and solo are in the track menu (hold the header). */
+  const header = $derived(compact.current ? 52 : 184)
+  const rowHeight = $derived(compact.current ? 56 : coarse.current ? 76 : 64)
   const project = $derived(studio.project)
   const bar = $derived(project.beatsPerBar)
   const grid = $derived(gridFor(studio.arrangementSnap, bar))
@@ -86,10 +89,12 @@
   function create(trackId=studio.track?.id,beat=studio.insertion?.trackId===trackId?studio.insertion.beat:studio.position){
     if(trackId)studio.addArrangementClip(trackId,beat)
   }
-  function context(e:MouseEvent,target:Target) {
-    e.preventDefault();e.stopPropagation();cancel()
-    menu={target,point:{x:e.clientX,y:e.clientY},anchor:e.currentTarget as HTMLElement}
+  /** Right-click, or hold a finger still: the menu for what is under it. */
+  function context(point:Point,target:Target,anchor:HTMLElement) {
+    cancel()
+    menu={target,point,anchor}
   }
+  const beatAt = (point:Point,element:HTMLElement) => Math.max(0,Math.round((point.x-element.getBoundingClientRect().left)/zoom/grid)*grid)
   function openClip(track:Track,clip:Clip) {studio.openClipEditor(track.id,clip.id)}
   function key(e:KeyboardEvent) {
     if(e.key==='Escape' && drag){e.preventDefault();e.stopPropagation();cancel();return}
@@ -125,7 +130,7 @@
   <div bind:this={scroller} use:preserveScroll={'arrangement'} class="relative min-h-0 overflow-auto overscroll-contain bg-display" onwheel={wheel} onpointermove={move} onpointerup={finish} onpointercancel={cancel} onlostpointercapture={cancel} role="group" aria-label="Arrangement timeline">
     <div class="relative min-w-full" style:width="{header+width}px" style:min-height="100%">
       <div class="sticky top-0 z-20 flex h-12 border-b border-line bg-surface">
-        <div class="sticky left-0 z-30 shrink-0 border-r border-line bg-surface truncate px-3 py-3 font-mono text-xs text-muted" style:width="{header}px" role="status">{studio.notice || 'Tracks'}</div>
+        <div class={['sticky left-0 z-30 shrink-0 truncate border-r border-line bg-surface font-mono text-xs text-muted', compact.current ? 'px-2 py-3' : 'px-3 py-3']} style:width="{header}px" role="status"><span class={[compact.current && studio.notice && 'sr-only']}>{studio.notice || (compact.current ? '#' : 'Tracks')}</span></div>
         <div class="relative shrink-0" style:width="{width}px">
           <div class="absolute inset-x-0 top-0 h-4 cursor-pointer bg-raised" aria-label="Loop strip · drag to set the loop" role="group" title="Drag to set the loop" onpointerdown={drawLoop}>
             {#if project.loop.enabled}
@@ -143,13 +148,21 @@
       </div>
       {#each project.tracks as track,index (track.id)}
         {@const color=trackColor(index)}
-        <div class="flex border-b border-line" style:height={coarse.current?'76px':'64px'}>
-          <div class="sticky left-0 z-10 flex shrink-0 items-center gap-1 border-r border-line bg-surface px-2" style:width="{header}px" style:border-left="3px solid {color}" oncontextmenu={e=>context(e,{kind:'track',trackId:track.id})} role="group" aria-label={track.name}>
-            <button type="button" class="min-w-0 flex-1 truncate text-left text-xs" aria-pressed={studio.track?.id===track.id} onclick={()=>studio.select(track.id)}>{track.name}</button>
-            <button type="button" class="w-7 text-xs" aria-label="Mute {track.name}" aria-pressed={track.muted} onclick={()=>studio.edit(()=>track.muted=!track.muted)}>M</button>
-            <button type="button" class="w-7 text-xs" aria-label="Solo {track.name}" aria-pressed={track.solo} onclick={()=>studio.edit(()=>track.solo=!track.solo)}>S</button>
+        {@const selected=studio.track?.id===track.id}
+        <div class="flex border-b border-line" style:height="{rowHeight}px">
+          <div class={['sticky left-0 z-10 flex shrink-0 items-center gap-1 border-r border-line px-2',selected?'bg-raised':'bg-surface']} style:width="{header}px" style:border-left="3px solid {color}" use:hold={(point,node)=>context(point,{kind:'track',trackId:track.id},node)} role="group" aria-label={track.name}>
+            {#if compact.current}
+              <button type="button" class="grid h-full min-w-0 flex-1 content-center text-left font-mono" aria-pressed={selected} aria-label="Track {index+1}: {track.name}{track.muted?', muted':''}{track.solo?', solo':''}" title="{track.name} · hold for mute, solo and sound" onclick={()=>studio.select(track.id)}>
+                <span class="text-sm">{index+1}</span>
+                <span class="text-[10px] text-muted">{track.muted?'M':''}{track.solo?'S':''}</span>
+              </button>
+            {:else}
+              <button type="button" class="min-w-0 flex-1 truncate text-left text-xs" aria-pressed={selected} onclick={()=>studio.select(track.id)}>{track.name}</button>
+              <button type="button" class="w-7 text-xs" aria-label="Mute {track.name}" aria-pressed={track.muted} onclick={()=>studio.edit(()=>track.muted=!track.muted)}>M</button>
+              <button type="button" class="w-7 text-xs" aria-label="Solo {track.name}" aria-pressed={track.solo} onclick={()=>studio.edit(()=>track.solo=!track.solo)}>S</button>
+            {/if}
           </div>
-          <div data-track-lane class="relative shrink-0" style:width="{width}px" style:background-image="repeating-linear-gradient(90deg,var(--color-grid-strong) 0 1px,transparent 1px {bar*zoom}px),repeating-linear-gradient(90deg,var(--color-grid-faint) 0 1px,transparent 1px {grid*zoom}px)" onclick={e=>selectLane(e,track)} ondblclick={e=>{e.stopPropagation();create(track.id,at(e,e.currentTarget))}} oncontextmenu={e=>context(e,{kind:'lane',trackId:track.id,beat:at(e,e.currentTarget)})} role="presentation">
+          <div data-track-lane class="relative shrink-0" style:width="{width}px" style:background-image="repeating-linear-gradient(90deg,var(--color-grid-strong) 0 1px,transparent 1px {bar*zoom}px),repeating-linear-gradient(90deg,var(--color-grid-faint) 0 1px,transparent 1px {grid*zoom}px)" onclick={e=>selectLane(e,track)} ondblclick={e=>{e.stopPropagation();create(track.id,at(e,e.currentTarget))}} use:hold={(point,node)=>context(point,{kind:'lane',trackId:track.id,beat:beatAt(point,node)},node)} role="presentation">
             {#if studio.insertion?.trackId===track.id}<span class="pointer-events-none absolute inset-y-0 z-10 border-l-2 border-dashed border-mint" style:left="{studio.insertion.beat*zoom}px"></span>{/if}
             {#each track.clips as clip (clip.id)}
               {@const active=studio.clip?.id===clip.id}
@@ -157,7 +170,7 @@
               {@const collision=drag?.clipId===clip.id&&overlaps(track.clips,preview.start,preview.length,clip.id)}
               {#if drag?.clipId===clip.id}<span class="pointer-events-none absolute inset-y-1 border border-dashed border-muted" style:left="{clip.start*zoom}px" style:width="{clip.length*zoom}px"></span>{/if}
               <!-- svelte-ignore a11y_click_events_have_key_events (keys are handled by the timeline: Enter, Delete, ⌘D) -->
-              <div data-arrangement-clip data-input-scope="arrangement" class={['absolute inset-y-1 overflow-hidden rounded border',active&&'ring-2 ring-fg',!coarse.current&&'touch-none cursor-grab']} style:left="{preview.start*zoom}px" style:width="{preview.length*zoom}px" style:background="color-mix(in srgb,{color} 20%,var(--color-display))" style:border-color={collision?'var(--color-danger)':color} role="button" tabindex="0" aria-label="Clip on {track.name} at beat {clip.start}" onfocus={()=>studio.select(track.id,clip.id)} onclick={e=>{e.stopPropagation();if(suppressClick){suppressClick=false;return}studio.select(track.id,clip.id)}} ondblclick={e=>{e.stopPropagation();if(!suppressClick)openClip(track,clip)}} onpointerdown={e=>{if(e.button!==0)return;e.currentTarget.focus({preventScroll:true});studio.select(track.id,clip.id);if(!coarse.current)begin(e,'move',clip,track.id,clip.id)}} oncontextmenu={e=>context(e,{kind:'clip',trackId:track.id,clipId:clip.id})}>
+              <div data-arrangement-clip data-input-scope="arrangement" class={['absolute inset-y-1 overflow-hidden rounded border',active&&'ring-2 ring-fg',!coarse.current&&'touch-none cursor-grab']} style:left="{preview.start*zoom}px" style:width="{preview.length*zoom}px" style:background="color-mix(in srgb,{color} 20%,var(--color-display))" style:border-color={collision?'var(--color-danger)':color} role="button" tabindex="0" aria-label="Clip on {track.name} at beat {clip.start}" onfocus={()=>studio.select(track.id,clip.id)} onclick={e=>{e.stopPropagation();if(suppressClick){suppressClick=false;return}studio.select(track.id,clip.id)}} ondblclick={e=>{e.stopPropagation();if(!suppressClick)openClip(track,clip)}} onpointerdown={e=>{if(e.button!==0)return;e.currentTarget.focus({preventScroll:true});studio.select(track.id,clip.id);if(!coarse.current)begin(e,'move',clip,track.id,clip.id)}} use:hold={(point,node)=>context(point,{kind:'clip',trackId:track.id,clipId:clip.id},node)}>
                 <ClipPreview {clip} {color} {zoom} />
                 <span class="pointer-events-none absolute top-1 left-2 font-mono text-[10px] text-fg">{drag?.clipId===clip.id?`${preview.start} · ${preview.length} beats${collision?' · overlap':''}`:`${clip.notes.length} notes`}</span>
                 {#if active && (!coarse.current||preview.length*zoom>=96)}

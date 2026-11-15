@@ -24,11 +24,27 @@ class WebAudio implements AudioBackend {
   #ready = this.#init()
 
   constructor() {
+    // iOS treats web audio as page sound by default: the silent switch mutes it and it may stop with the screen.
+    // Saying it is playback makes it behave like a music app (Safari 17+; elsewhere the property is absent).
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession
+    if (session) session.type = 'playback'
+
+    // Browsers start audio only from a gesture, and iOS suspends or interrupts it (a call, Siri, another app).
+    // Every time it stops, the next touch or key starts it again.
     const unlock = () => {
       if (this.#ctx.state === 'running') return UNLOCK_EVENTS.forEach((type) => removeEventListener(type, unlock, true))
-      void this.#ctx.resume()
+      this.#wake()
     }
-    UNLOCK_EVENTS.forEach((type) => addEventListener(type, unlock, true))
+    const listen = () => UNLOCK_EVENTS.forEach((type) => addEventListener(type, unlock, true))
+    this.#ctx.addEventListener('statechange', () => this.#ctx.state !== 'running' && this.#ctx.state !== 'closed' && listen())
+    document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && this.#wake())
+    listen()
+  }
+
+  /** Resumes audio that a browser suspended or iOS interrupted. */
+  #wake() {
+    const state = this.#ctx.state as AudioContextState | 'interrupted'
+    if (state === 'suspended' || state === 'interrupted') void this.#ctx.resume().catch(() => {})
   }
 
   async setBuffer() {}
@@ -56,14 +72,14 @@ class WebAudio implements AudioBackend {
   }
 
   #post(message: WorkletMessage, transfer: Transferable[] = []) {
-    if (this.#ctx.state === 'suspended') void this.#ctx.resume()
+    this.#wake()
     if (this.#node) this.#node.port.postMessage(message, transfer)
     else void this.#ready.then(() => this.#node!.port.postMessage(message, transfer))
   }
 
   /** Real-time path: shared ring when cross-origin isolated, otherwise one message per command. */
   #send(op: number, a = 0, b = 0, c = 0, value = 0) {
-    if (this.#ctx.state === 'suspended') void this.#ctx.resume()
+    this.#wake()
     if (this.#ring?.push(op, a, b, c, value)) return
     this.#post({ type: 'command', slot: command(op, a, b, c, value) })
   }

@@ -1,9 +1,10 @@
+import { SECTIONS } from '../audio/patch-controls'
 import type { Mode } from '../device/Device.svelte'
 
 export type StudioMode = 'sound' | 'pattern' | 'perform' | 'song' | 'mix'
 
 export const STUDIO_MODES: (Mode & { id: StudioMode })[] = [
-  { id: 'sound', label: 'Sound', pages: ['Voice', 'Envelope'] },
+  { id: 'sound', label: 'Sound', pages: SECTIONS.map((s) => s.label), tabs: false, form: true },
   { id: 'pattern', label: 'Pattern', pages: ['Steps', 'Notes'] },
   { id: 'perform', label: 'Perform', pages: ['Clips', 'Keys'] },
   { id: 'song', label: 'Song' },

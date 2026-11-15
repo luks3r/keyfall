@@ -24,6 +24,9 @@ function save(stored: Stored) {
 }
 
 const clone = (patch: SynthPatch): SynthPatch => structuredClone(patch)
+
+/** Heading a sound is listed under. */
+export const presetGroup = (preset: SoundPreset) => (preset.id.startsWith(CUSTOM_PREFIX) ? 'My sounds' : (preset.group ?? 'Other'))
 const fallbackPatch = () => clone((BUILT_IN.find((p) => p.kind === 'synth') as SynthPreset).patch)
 
 export const encodePreset = (preset: SoundPreset): SoundData =>
@@ -82,15 +85,15 @@ class Sound {
     if (this.preset.kind === 'synth') this.patch = clone(this.preset.patch)
   }
 
-  saveAs(name: string) {
-    const preset: SynthPreset = {
-      id: CUSTOM_PREFIX + Date.now().toString(36),
-      name: name.trim() || 'Untitled',
-      kind: 'synth',
-      patch: $state.snapshot(this.patch),
-    }
+  /** Keeps `patch` as one of the player's own sounds; returns its id. */
+  addPreset(name: string, patch: SynthPatch) {
+    const preset: SynthPreset = { id: CUSTOM_PREFIX + Date.now().toString(36), name: name.trim() || 'Untitled', kind: 'synth', patch: clone(patch) }
     this.custom.push(preset)
-    this.presetId = preset.id
+    return preset.id
+  }
+
+  saveAs(name: string) {
+    this.presetId = this.addPreset(name, $state.snapshot(this.patch))
   }
 
   save() {

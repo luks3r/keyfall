@@ -2,19 +2,103 @@
 
 @custom-variant mac-native (&:where(.mac-native, .mac-native *));
 
-@theme {
-  --color-bg: #0c0d11;
-  --color-surface: #121318;
-  --color-raised: #1c1e25;
-  --color-hover: #282b36;
-  --color-line: #ffffff10;
-  --color-fg: #e8e9ee;
-  --color-muted: #7d8090;
-  --color-accent: #8d9dff;
-  --color-accent-strong: #a5b2ff;
-  --color-mint: #3ad6b8;
-  --color-danger: #e5484d;
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+/*
+ * Design tokens: the one source of colour, type, size and shape. Components in src/lib/ui use only these (see its
+ * README); one-off values in brackets are for screens that have not moved over yet.
+ *
+ * One instrument geometry, two material palettes: dark here, light under [data-theme='light'].
+ */
+@theme static {
+  --color-bg: #101110;
+  --color-surface: #1b1d1b;
+  --color-raised: #292c28;
+  --color-hover: #363a34;
+  --color-line: #3d423a;
+  --color-fg: #eeeede;
+  --color-muted: #b2b6a9;
+  --color-accent: #eeeede;
+  --color-accent-strong: #ffffff;
+  --color-mint: #e5a54b;
+  --color-danger: #ff7968;
+  --color-display: #111411;
+  --color-grid-faint: #ffffff0c;
+  --color-grid: #ffffff1c;
+  --color-grid-strong: #ffffff38;
+  --color-playhead: #f5f4dc;
+  --color-key-white: #deded3;
+  --color-key-black: #252923;
+  --color-key-seam: #00000055;
+  --color-key-label-white: #3c4238;
+  --color-key-label-black: #c7cdbf;
+  --color-hand-left: #6ac7a7;
+  --color-hand-left-dark: #3aa480;
+  --color-hand-right: #91b6ea;
+  --color-hand-right-dark: #6497d7;
+  --color-track-1: #91b6ea;
+  --color-track-2: #6ac7a7;
+  --color-track-3: #e9af58;
+  --color-track-4: #d9d9c9;
+  --color-track-5: #d7a0ae;
+  --color-track-6: #b9a5df;
+  --color-track-7: #e9ad8b;
+  --color-track-8: #b7ca7f;
+  --color-knob-blue: #4b83e8;
+  --color-knob-green: #39b36e;
+  --color-knob-white: #e6e6dc;
+  --color-knob-orange: #f2782f;
+  --color-knob-cap: #1d201c;
+  --color-knob-mark: #f4f3e6;
+
+  --font-sans: 'Helvetica Neue', Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Type scale. `label` is the instrument's small capitals: mono, uppercase, spaced. Nothing smaller. */
+  --text-label: 11px;
+  --text-label--letter-spacing: 0.08em;
+  --text-label--line-height: 1.3;
+
+  /* Control heights follow the pointer: compact for a mouse, a full fingertip for touch (see :root below). */
+  --spacing-control: var(--control);
+  --spacing-control-sm: var(--control-sm);
+
+  --radius-control: 4px;
+  --radius-surface: 12px;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root {
+  --control: 36px;
+  --control-sm: 28px;
+}
+@media (pointer: coarse) {
+  :root {
+    --control: 44px;
+    --control-sm: 40px;
+  }
+}
+
+:root[data-theme='light'] {
+  --color-bg: #e8e7e2; --color-surface: #f4f3ee; --color-raised: #deded6; --color-hover: #d0d1c7;
+  --color-line: #b8bcb0; --color-fg: #252a25; --color-muted: #596153;
+  --color-accent: #2b352c; --color-accent-strong: #101810; --color-mint: #9b5618; --color-danger: #b73226;
+  --color-display: #f0f0e8; --color-grid-faint: #1620140d; --color-grid: #16201420; --color-grid-strong: #16201440;
+  --color-playhead: #293a2b; --color-key-white: #faf9f0; --color-key-black: #343a31; --color-key-seam: #252f2340;
+  --color-key-label-white: #535b4b; --color-key-label-black: #e9eddf;
+  --color-hand-left: #2e896d; --color-hand-left-dark: #67c4a0; --color-hand-right: #456eab; --color-hand-right-dark: #8eb5e8;
+  --color-track-1: #39699c; --color-track-2: #26775a; --color-track-3: #92590c; --color-track-4: #626b55;
+  --color-track-5: #9b4f65; --color-track-6: #7453a5; --color-track-7: #a45630; --color-track-8: #637c22;
+  --color-knob-blue: #3a72d6; --color-knob-green: #2e9c5c; --color-knob-white: #fbfaf3; --color-knob-orange: #ec6a1e;
+  --color-knob-cap: #2b302a; --color-knob-mark: #fbfaf3;
+}
+
+/* The instrument's small capitals, for control names and key captions. */
+@utility label {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  letter-spacing: var(--text-label--letter-spacing);
+  line-height: var(--text-label--line-height);
+  text-transform: uppercase;
 }
 
 @layer base {
@@ -30,14 +114,23 @@
 
   body {
     @apply overflow-hidden overscroll-none bg-bg font-sans text-sm text-fg antialiased select-none;
+    letter-spacing: 0.005em;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
   }
 
+  /* 16px keeps iOS from zooming the page when a field takes focus. */
   input,
   select {
     font-size: max(16px, 1em);
+  }
+
+  button {
+    font-weight: 500;
+  }
+  button:disabled {
+    cursor: default;
   }
 
   :focus-visible {
@@ -47,65 +140,54 @@
   input[type='range'] {
     accent-color: var(--color-accent);
   }
+
+  /* Pressed and selected read as a lit strip under the key. */
+  button[aria-pressed='true'],
+  button[role='tab'][aria-selected='true'],
+  button[role='radio'][aria-checked='true'] {
+    box-shadow: inset 0 -2px 0 var(--color-mint);
+  }
 }
 
-/* One instrument geometry, two material palettes. */
-:root {
-  --color-bg: #101110; --color-surface: #1b1d1b; --color-raised: #292c28; --color-hover: #363a34;
-  --color-line: #3d423a; --color-fg: #eeeede; --color-muted: #b2b6a9;
-  --color-accent: #eeeede; --color-accent-strong: #ffffff; --color-mint: #e5a54b; --color-danger: #ff7968;
-  --color-display: #111411; --color-grid-faint: #ffffff0c; --color-grid: #ffffff1c; --color-grid-strong: #ffffff38;
-  --color-playhead: #f5f4dc; --color-key-white: #deded3; --color-key-black: #252923; --color-key-seam: #00000055;
-  --color-key-label-white: #3c4238; --color-key-label-black: #c7cdbf;
-  --color-hand-left: #6ac7a7; --color-hand-left-dark: #3aa480; --color-hand-right: #91b6ea; --color-hand-right-dark: #6497d7;
-  --color-track-1: #91b6ea; --color-track-2: #6ac7a7; --color-track-3: #e9af58; --color-track-4: #d9d9c9;
-  --color-track-5: #d7a0ae; --color-track-6: #b9a5df; --color-track-7: #e9ad8b; --color-track-8: #b7ca7f;
-  --font-sans: 'Helvetica Neue', Arial, ui-sans-serif, system-ui, sans-serif;
-  --color-knob-blue: #4b83e8; --color-knob-green: #39b36e; --color-knob-white: #e6e6dc; --color-knob-orange: #f2782f;
-  --color-knob-cap: #1d201c; --color-knob-mark: #f4f3e6;
+@layer components {
+  [role='tablist'] { border-bottom: 1px solid var(--color-line); }
+  [role='tab'] { font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; }
+  [role='tablist'][aria-orientation='vertical'] { border-bottom: 0; }
+  [role='tablist'][aria-orientation='vertical'] [role='tab'][aria-selected='true'] { box-shadow: inset 3px 0 0 var(--color-mint); }
+  [role='dialog'] > header h2 { font-weight: 500; letter-spacing: -.025em; }
+
+  /* Menu rows: one height for every menu, a full fingertip on touch screens. */
+  [role='menu'] :is(button, [role^='menuitem']) {
+    min-height: var(--control);
+    padding: 8px 12px;
+    border-radius: var(--radius-control);
+    text-align: left;
+  }
+  [role='menu'] :is(button, [role^='menuitem']):hover,
+  [role='menu'] :is(button, [role^='menuitem']):focus-visible { background: var(--color-raised); }
+  [role='menu'] :is(button, [role^='menuitem']):disabled { opacity: .4; }
+  [role='menu'] [data-destructive] { border-top: 1px solid var(--color-line); color: var(--color-danger); margin-top: 4px; }
 }
-:root[data-theme='light'] {
-  --color-bg: #e8e7e2; --color-surface: #f4f3ee; --color-raised: #deded6; --color-hover: #d0d1c7;
-  --color-line: #b8bcb0; --color-fg: #252a25; --color-muted: #596153;
-  --color-accent: #2b352c; --color-accent-strong: #101810; --color-mint: #9b5618; --color-danger: #b73226;
-  --color-display: #f0f0e8; --color-grid-faint: #1620140d; --color-grid: #16201420; --color-grid-strong: #16201440;
-  --color-playhead: #293a2b; --color-key-white: #faf9f0; --color-key-black: #343a31; --color-key-seam: #252f2340;
-  --color-key-label-white: #535b4b; --color-key-label-black: #e9eddf;
-  --color-hand-left: #2e896d; --color-hand-left-dark: #67c4a0; --color-hand-right: #456eab; --color-hand-right-dark: #8eb5e8;
-  --color-track-1: #39699c; --color-track-2: #26775a; --color-track-3: #92590c; --color-track-4: #626b55;
-  --color-track-5: #9b4f65; --color-track-6: #7453a5; --color-track-7: #a45630; --color-track-8: #637c22;
-  --color-knob-blue: #3a72d6; --color-knob-green: #2e9c5c; --color-knob-white: #fbfaf3; --color-knob-orange: #ec6a1e;
-  --color-knob-cap: #2b302a; --color-knob-mark: #fbfaf3;
-}
-body { letter-spacing: .005em; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }
 }
 
-button, select, input:not([type='range']) { border-radius: 4px; }
-button { font-weight: 500; }
-button[aria-pressed='true'], button[role='tab'][aria-selected='true'] { box-shadow: inset 0 -2px 0 var(--color-mint); }
-button:disabled { cursor: default; }
-[role='tablist'] { border-bottom: 1px solid var(--color-line); }
-[role='tab'] { font-family: ui-monospace, monospace; font-size: 12px; letter-spacing: .04em; }
-[role='dialog'] > header h2 { font-weight: 500; letter-spacing: -.025em; }
-[role='menu'] button { min-height: 36px; padding: 8px 12px; text-align: left; }
-[role='menu'] button:hover, [role='menu'] button:focus-visible { background: var(--color-raised); }
-[role='menu'] button[data-destructive] { border-top: 1px solid var(--color-line); color: var(--color-danger); margin-top: 4px; }
+/*
+ * Legacy: hand-made controls in screens that have not moved to src/lib/ui yet. Unlayered, so they win over utility
+ * classes, which is why library parts (marked data-ui) are left out. Delete once no screen needs them.
+ */
+:is(button, select, input:not([type='range'])):not([data-ui]) { border-radius: 4px; }
 @media (pointer: coarse) {
-  button:not([data-grid-note]), select, input:not([type='range']) { min-height: 44px; }
-  button[aria-label], button[role='tab'] { min-width: 44px; }
-  [role='menu'] button { min-height: 44px; }
+  :is(button:not([data-grid-note]), select, input:not([type='range'])):not([data-ui]) { min-height: 44px; }
+  :is(button[aria-label], button[role='tab']):not([data-ui]) { min-width: 44px; }
 }
 
-@theme { --color-display: #111411; --color-playhead: #f5f4dc; }
 .play-control { display: grid; gap: 4px; border-top: 2px solid var(--marker, var(--color-line)); padding-top: 6px; }
 .control-label { font: 10px ui-monospace, monospace; letter-spacing: .09em; color: var(--color-muted); }
-.clip-actions { font-family: ui-monospace, monospace; }
+.clip-actions { font-family: ui-monospace, monospace; min-width: 0; max-width: 100%; }
 [aria-label='Position'] { font: 500 22px ui-monospace, monospace; letter-spacing: -.06em; }
 [aria-label='Tempo'] { border: 1px solid var(--color-line); font-family: ui-monospace, monospace; }
-button[role='radio'][aria-checked='true'] { box-shadow: inset 0 -2px 0 var(--color-mint); }
-.clip-actions { min-width: 0; max-width: 100%; }
 .clip-actions > span:first-child { flex: 1 1 100%; }
 @media (min-width: 1100px) { .clip-actions > span:first-child { flex: 1 1 auto; } }
 

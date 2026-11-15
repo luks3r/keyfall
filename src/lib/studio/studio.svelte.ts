@@ -1,3 +1,5 @@
+import { untrack } from 'svelte'
+import { KITS } from '../audio/drums'
 import { encodeSynth } from '../audio/patch'
 import { findAvailableStart, gridFor, resizeBounds, type ArrangementSnap } from './arrangement'
 import { ensureClick } from '../audio/click'
@@ -21,7 +23,9 @@ import {
   createScene,
   createTrack,
   fromSong,
-  KIT,
+  MAX_BEATS_PER_BAR,
+  MAX_TEMPO,
+  MIN_TEMPO,
   migrate,
   toSong,
   type Clip,
@@ -78,7 +82,8 @@ function loadPrefs(): { view: View; metronome: boolean; countIn: boolean } {
 export const trackChannel = (index: number) => FIRST_TRACK_CHANNEL + (index % TRACK_CHANNELS)
 export const MAX_TRACKS = TRACK_CHANNELS
 export const STOP = 'stop'
-export const isKit = (track: Track) => track.preset === KIT
+export const isKitPreset = (preset: string | undefined) => KITS.some((kit) => kit.id === preset)
+export const isKit = (track: Track) => isKitPreset(track.preset)
 
 const prefs = loadPrefs()
 
@@ -188,8 +193,13 @@ export class Studio implements TransportKeys, Capture {
     controls.run = (target, value) => this.#runControl(target, value)
   }
 
-  /** Takes over live input while Studio is open. */
+  /** Takes over live input while Studio is open. Untracked: an effect calling this must not re-run (and stop the
+   * transport) when the selected track changes. */
   attach(player: Player) {
+    untrack(() => this.#attach(player))
+  }
+
+  #attach(player: Player) {
     this.#player = player
     player.studio = true
     player.studioKeys = this
@@ -382,7 +392,7 @@ export class Studio implements TransportKeys, Capture {
 
   addTrack(preset = this.track && !isKit(this.track) ? this.track.preset : undefined, pads: Pad[] = []) {
     if (this.project.tracks.length >= MAX_TRACKS) return null
-    const name = preset === KIT ? 'Drums' : `Track ${this.project.tracks.length + 1}`
+    const name = isKitPreset(preset) ? 'Drums' : `Track ${this.project.tracks.length + 1}`
     const track = createTrack(name, preset, this.project.scenes.length, pads)
     this.edit((p) => p.tracks.push(track))
     this.selectedTrack = track.id
@@ -493,7 +503,14 @@ export class Studio implements TransportKeys, Capture {
   }
 
   setTempo(tempo: number) {
-    this.project.tempo = Math.max(20, Math.min(300, Math.round(tempo)))
+    const next = Math.max(MIN_TEMPO, Math.min(MAX_TEMPO, Math.round(tempo)))
+    if (next !== this.project.tempo) this.tweak((p) => (p.tempo = next))
+  }
+
+  /** Beats in a bar (quarter notes): 3 for a waltz, 4 for most songs. Notes stay where they are in beats. */
+  setBeatsPerBar(beats: number) {
+    const next = Math.max(1, Math.min(MAX_BEATS_PER_BAR, Math.round(beats)))
+    if (next !== this.project.beatsPerBar) this.tweak((p) => (p.beatsPerBar = next))
   }
 
   toggleLoop() {
